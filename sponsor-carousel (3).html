@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sponsor Carousel</title>
+    <style>
+        .sponsor-container {
+            width: 70%;
+            max-width: 70%;
+            overflow: hidden;
+            background: transparent;
+            padding: 20px 0;
+            position: relative;
+            margin: 0 auto;
+        }
+
+        .sponsor-wrapper {
+            display: flex;
+            width: fit-content;
+            animation: scroll 25s linear infinite;
+        }
+
+        .sponsor-item {
+            flex-shrink: 0;
+            padding: 0 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .sponsor-item img {
+            height: 80px;
+            width: 80px;
+            object-fit: contain;
+            opacity: 0.7;
+            transition: all 0.3s ease;
+        }
+
+        .sponsor-item img:hover {
+            opacity: 1;
+            transform: scale(1.05);
+        }
+
+        @keyframes scroll {
+            0% {
+                transform: translateX(0);
+            }
+            100% {
+                transform: translateX(-50%);
+            }
+        }
+
+        .sponsor-container:hover .sponsor-wrapper {
+            animation-play-state: paused;
+        }
+
+        /* Fade effect at entrance and exit */
+        .sponsor-container::before,
+        .sponsor-container::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            width: 150px;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        .sponsor-container::before {
+            left: 0;
+            background: linear-gradient(to right, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0));
+        }
+
+        .sponsor-container::after {
+            right: 0;
+            background: linear-gradient(to left, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0));
+        }
+    </style>
+</head>
+<body>
+
+    <div class="sponsor-container">
+        <div class="sponsor-wrapper">
+            <!-- REPLACE IMAGE URLS BELOW - Keep both sets identical for seamless loop -->
+            
+            <div class="sponsor-item">
+                <img src="https://placehold.co/180x60/667eea/white?text=Company+Logo" alt="Sponsor 1">
+            </div>
+            <div class="sponsor-item">
+                <img src="https://placehold.co/180x60/764ba2/white?text=Brand+Name" alt="Sponsor 2">
+            </div>
+            <div class="sponsor-item">
+                <img src="https://placehold.co/180x60/f093fb/white?text=Partner+Co" alt="Sponsor 3">
+            </div>
+            <div class="sponsor-item">
+                <img src="https://placehold.co/180x60/4facfe/white?text=Sponsor+Inc" alt="Sponsor 4">
+            </div>
+            <div class="sponsor-item">
+                <img src="https://placehold.co/180x60/00f2fe/white?text=Tech+Corp" alt="Sponsor 5">
+            </div>
+            <div class="sponsor-item">
+                <img src="https://placehold.co/180x60/43e97b/white?text=Global+Ltd" alt="Sponsor 6">
+            </div>
+            
+            <!-- DUPLICATE SET - Must match above exactly -->
+            
+            <div class="sponsor-item">
+                <img src="https://placehold.co/180x60/667eea/white?text=Company+Logo" alt="Sponsor 1">
+            </div>
+            <div class="sponsor-item">
+                <img src="https://placehold.co/180x60/764ba2/white?text=Brand+Name" alt="Sponsor 2">
+            </div>
+            <div class="sponsor-item">
+                <img src="https://placehold.co/180x60/f093fb/white?text=Partner+Co" alt="Sponsor 3">
+            </div>
+            <div class="sponsor-item">
+                <img src="https://placehold.co/180x60/4facfe/white?text=Sponsor+Inc" alt="Sponsor 4">
+            </div>
+            <div class="sponsor-item">
+                <img src="https://placehold.co/180x60/00f2fe/white?text=Tech+Corp" alt="Sponsor 5">
+            </div>
+            <div class="sponsor-item">
+                <img src="https://placehold.co/180x60/43e97b/white?text=Global+Ltd" alt="Sponsor 6">
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

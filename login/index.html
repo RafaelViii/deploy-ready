@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login</title>
+  <link rel="stylesheet" href="renal-care-login.css" />
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore-compat.js"></script>
+
+  <script>
+    const firebaseConfig = {
+      apiKey:            "AIzaSyAy3V0HpECz611eo3gpVE50KjNC_BRo608",
+      authDomain:        "yepbro-e3468.firebaseapp.com",
+      projectId:         "yepbro-e3468",
+      storageBucket:     "yepbro-e3468.firebasestorage.app",
+      messagingSenderId: "616963714633",
+      appId:             "1:616963714633:web:ef2f7fa085c6e989f2d998",
+      measurementId:     "G-GG3N0299VE"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    // If already logged in, validate profile and redirect
+    auth.onAuthStateChanged(async (user) => {
+      if (user) {
+        try {
+          // Check if user profile exists in Firestore
+          const userDoc = await db.collection('users').doc(user.uid).get();
+          
+          if (!userDoc.exists) {
+            // Profile doesn't exist - sign out and show error
+            await auth.signOut();
+            const error = document.getElementById("error");
+            if (error) {
+              error.textContent = "User profile not found. Please contact administrator.";
+              error.style.display = "block";
+            }
+            return;
+          }
+          
+          // Profile exists - redirect to dashboard
+          window.location.href = "../index_slight_changes.html";
+        } catch (e) {
+          console.error('Error checking user profile:', e);
+          await auth.signOut();
+          const error = document.getElementById("error");
+          if (error) {
+            error.textContent = "Error loading profile. Please try again.";
+            error.style.display = "block";
+          }
+        }
+      }
+    });
+  </script>
+</head>
+<body>
+
+<div class="login-wrapper">
+  <!-- Left: Logo + Title -->
+  <div class="logo-title-wrapper">
+    <img src="/Assets/logo-no-bg.png" alt="Logo" class="logo-img" />
+    <h1 class="login-title">LUZON RENAL CARE</h1>
+  </div>
+
+  <!-- Right: Login form -->
+  <div class="login-card">
+    <div class="form-group">
+      <input type="email" id="username" placeholder="Enter email" />
+    </div>
+
+    <div class="form-group">
+      <input type="password" id="password" placeholder="Enter password" />
+    </div>
+
+    <button onclick="login()" id="loginBtn">Login</button>
+
+    <div class="forgot-pass">
+      <p>Forgot password?</p>
+    </div>
+
+    <div class="error" id="error">Invalid email or password</div>
+  </div>
+</div>
+
+
+<footer>
+  <div class="footer-content">
+
+    <div class="footer-grid">
+      
+      <!-- LEFT COLUMN -->
+      <div class="footer-col-left">
+        <h3>LUZON RENAL CARE</h3>
+        <p class="footer-desc">
+          Hospital Monitoring & Accounting System
+        </p>
+
+        <p class="footer-small">Version 1.0.0</p>
+        <p class="footer-small">Support: rafaelvberinguelajr@gmail.com</p>
+      </div>
+
+      <!-- RIGHT COLUMN -->
+      <div class="footer-col">
+        <h4>System Modules</h4>
+        <ul class="footer-list">
+          <li>Inventory</li>
+          <li>Sales</li>
+          <li>Accounting</li>
+          <li>Reports</li>
+        </ul>
+
+        <h4>User Roles</h4>
+        <ul class="footer-list">
+          <li>Admin</li>
+          <li>Accounting</li>
+          <li>Nurses</li>
+          <li>Owner</li>
+        </ul>
+      </div>
+
+    </div>
+
+    <p class="footer-credit">
+      Powered by HYDROMED<br>
+      © 2026 All rights reserved
+    </p>
+
+  </div>
+</footer>
+
+
+  <script>
+    async function login() {
+      const email    = document.getElementById("username").value.trim();
+      const password = document.getElementById("password").value;
+      const error    = document.getElementById("error");
+      const btn      = document.getElementById("loginBtn");
+
+      // Hide old error
+      error.style.display = "none";
+
+      // Basic validation
+      if (!email || !password) {
+        error.textContent   = "Please enter both email and password";
+        error.style.display = "block";
+        return;
+      }
+
+      // Disable button while signing in
+      btn.disabled     = true;
+      btn.textContent  = "Logging in...";
+
+      try {
+        // Sign in with Firebase Auth
+        const userCredential = await auth.signInWithEmailAndPassword(email, password);
+        
+        // Check if user profile exists in Firestore
+        const userDoc = await db.collection('users').doc(userCredential.user.uid).get();
+        
+        if (!userDoc.exists) {
+          // Profile doesn't exist - sign out immediately
+          await auth.signOut();
+          
+          // Re-enable button
+          btn.disabled = false;
+          btn.textContent = "Login";
+          
+          // Show error
+          error.textContent = "User profile not found. Please contact administrator.";
+          error.style.display = "block";
+          return;
+        }
+        
+        // Get user data from Firestore
+        const userData = userDoc.data();
+        
+        // Optional: Check if user is active (if you have this field)
+        if (userData.status === 'inactive' || userData.status === 'disabled') {
+          await auth.signOut();
+          
+          btn.disabled = false;
+          btn.textContent = "Login";
+          
+          error.textContent = "Account is inactive. Please contact administrator.";
+          error.style.display = "block";
+          return;
+        }
+        
+        // Profile exists and user is active - onAuthStateChanged will handle redirect
+        
+      } catch (e) {
+        console.error('Login error:', e);
+        
+        // Re-enable button
+        btn.disabled    = false;
+        btn.textContent = "Login";
+
+        // Show appropriate error message
+        // Firebase now uses 'auth/invalid-credential' for wrong email OR password
+        if (e.code === 'auth/invalid-credential' || 
+            e.code === 'auth/user-not-found' || 
+            e.code === 'auth/wrong-password') {
+          error.textContent = "Invalid email or password";
+        } else if (e.code === 'auth/too-many-requests') {
+          error.textContent = "Too many failed attempts. Please try again later.";
+        } else if (e.code === 'auth/network-request-failed') {
+          error.textContent = "Network error. Please check your connection.";
+        } else if (e.code === 'auth/invalid-email') {
+          error.textContent = "Invalid email format";
+        } else {
+          error.textContent = "Login failed. Please try again.";
+        }
+        
+        error.style.display = "block";
+      }
+    }
+
+    // Allow pressing Enter to log in
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") login();
+    });
+  </script>
+</body>
+</html>

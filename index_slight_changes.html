@@ -1,0 +1,2124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Accounting Dashboard</title>
+  <link rel="stylesheet" href="styles.css"> 
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- SheetJS -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+
+  <!-- ── Firebase SDK (compat version) ── -->
+  <script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-analytics-compat.js"></script>
+
+  <script>
+    // ============================================================
+    // Firebase Init
+    // ============================================================
+    const firebaseConfig = {
+      apiKey:            "AIzaSyAy3V0HpECz611eo3gpVE50KjNC_BRo608",
+      authDomain:        "yepbro-e3468.firebaseapp.com",
+      projectId:         "yepbro-e3468",
+      storageBucket:     "yepbro-e3468.firebasestorage.app",
+      messagingSenderId: "616963714633",
+      appId:             "1:616963714633:web:ef2f7fa085c6e989f2d998",
+      measurementId:     "G-GG3N0299VE"
+    };
+
+    const firebaseApp = firebase.initializeApp(firebaseConfig);
+    const analytics    = firebase.analytics();
+    const db           = firebase.firestore();
+    const auth         = firebase.auth();
+
+    // ============================================================
+    // ROLE-BASED ACCESS CONTROL CONFIGURATION
+    // ===a=======================================================
+    const rolePermissions = {
+      admin: ['dashboard', 'inventory', 'trial', 'journals', 'accounts', 'financials', 'adjustments', 'payslip', 'reports', 'settings', 'dialysis'],
+      owner: ['dashboard', 'inventory', 'trial', 'journals', 'accounts', 'financials', 'adjustments', 'payslip', 'reports', 'settings', 'dialysis'],
+      nurse: ['trial', 'journals', 'financials', 'settings'],
+      medtech: ['reports', 'financials', 'settings']
+    };
+
+    // ============================================================
+    // AUTH GUARD — if not logged in, go to login page
+    // ============================================================
+    let currentUser = null;
+
+    auth.onAuthStateChanged(async (firebaseUser) => {
+      if (!firebaseUser) {
+        // Not logged in → redirect to login
+        window.location.href = "login/index.html";
+        return;
+      }
+
+      // Fetch profile from Firestore
+      const snap = await db.collection("users").doc(firebaseUser.uid).get();
+      
+      if (!snap.exists) {
+        // User doesn't have a profile in Firestore
+        alert('User profile not found. Please contact administrator.');
+        await auth.signOut();
+        window.location.href = "login/index.html";
+        return;
+      }
+
+      currentUser = { 
+        uid: firebaseUser.uid, 
+        email: firebaseUser.email,
+        ...snap.data() 
+      };
+
+      // Update sidebar with real user info from Firestore
+      updateSidebarProfile(currentUser);
+
+      // Apply role-based access control
+      applyRoleBasedAccess(currentUser.role);
+
+      // Show the app now that we confirmed auth
+      document.getElementById("appWrapper").style.display = "flex";
+    });
+
+    function updateSidebarProfile(user) {
+      const name    = user.name || user.email || "User";
+      const role    = user.role || "nurse";
+      
+      // Generate initials from name
+      const nameParts = name.split(" ");
+      const initials = nameParts.length > 1 
+        ? nameParts[0][0] + nameParts[nameParts.length - 1][0]
+        : name.substring(0, 2);
+
+      document.getElementById("userName").textContent = name;
+      document.getElementById("userRole").textContent = role.charAt(0).toUpperCase() + role.slice(1);
+      document.getElementById("userInitials").textContent = initials.toUpperCase();
+    }
+
+    function applyRoleBasedAccess(role) {
+      // Get allowed pages for this role
+      const allowedPages = rolePermissions[role] || [];
+      
+      // Get all navigation links
+      const navLinks = document.querySelectorAll('.sidebar nav a[data-page]');
+      
+      // Hide/show based on permissions
+      navLinks.forEach(link => {
+        const page = link.dataset.page;
+        
+        if (allowedPages.includes(page)) {
+          link.style.display = 'flex'; // Show allowed pages
+        } else {
+          link.style.display = 'none'; // Hide restricted pages
+        }
+      });
+
+      // Set first allowed page as active
+      if (allowedPages.length > 0) {
+        const firstAllowedPage = allowedPages[0];
+        
+        // Remove all active classes
+        document.querySelectorAll('.sidebar nav a').forEach(l => l.classList.remove('active'));
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        
+        // Activate first allowed page
+        const firstLink = document.querySelector(`.sidebar nav a[data-page="${firstAllowedPage}"]`);
+        const firstPage = document.getElementById(firstAllowedPage);
+        
+        if (firstLink) firstLink.classList.add('active');
+        if (firstPage) firstPage.classList.add('active');
+      }
+    }
+
+    // ============================================================
+    // Collection path constants
+    // ============================================================
+    const COL = {
+      CATEGORIES:     "config/categories",
+      LAB_TYPES:      "config/lab_types",
+      DEPARTMENTS:    "config/departments",
+      TIME_PRESETS:   "config/time_presets",
+      USERS:          "users",
+      PRODUCTS:       "products",
+      PRODUCT_SALES:  "product_sales",
+      PATIENTS:       "patients",
+      CHARGE_SLIPS:   "charge_slips",
+      SALES:          "sales",
+      LEAVE_REQUESTS: "leave_requests",
+      ATTENDANCE:     "attendance",
+      PAYROLL:        "payroll",
+      PRINT_QUEUE:    "print_queue"
+    };
+
+    // ============================================================
+    // Firestore helpers
+    // ============================================================
+    async function addDocument(collectionPath, data) {
+      return db.collection(collectionPath).add({
+        ...data,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+
+    async function setDocument(collectionPath, docId, data, options = {}) {
+      return db.collection(collectionPath).doc(docId).set(data, options);
+    }
+
+    async function getDocument(collectionPath, docId) {
+      const snap = await db.collection(collectionPath).doc(docId).get();
+      return snap.exists ? { id: snap.id, ...snap.data() } : null;
+    }
+
+    async function getDocuments(collectionPath, filters = []) {
+      let q = db.collection(collectionPath);
+      filters.forEach(([field, op, value]) => {
+        q = q.where(field, op, value);
+      });
+      const snap = await q.get();
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    }
+
+    async function updateDocument(collectionPath, docId, data) {
+      return db.collection(collectionPath).doc(docId).update({
+        ...data,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+
+    async function removeDocument(collectionPath, docId) {
+      return db.collection(collectionPath).doc(docId).delete();
+    }
+
+    function listenCollection(collectionPath, callback, filters = []) {
+      let q = db.collection(collectionPath);
+      filters.forEach(([field, op, value]) => {
+        q = q.where(field, op, value);
+      });
+      return q.onSnapshot((snap) => {
+        callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
+    }
+
+    // ============================================================
+    // Logout function (wired to the sidebar button)
+    // ============================================================
+    async function logout() {
+      try {
+        await auth.signOut();
+        // onAuthStateChanged will fire with null → redirects to login.html
+      } catch (error) {
+        console.error('Logout error:', error);
+        alert('Error logging out. Please try again.');
+      }
+    }
+
+    // ============================================================
+    // Charge Slip atomic transaction
+    // ============================================================
+    async function saveChargeSlip(slipData, slipId) {
+      const total = slipData.items.reduce(
+        (sum, item) => sum + item.quantity * item.unitPrice, 0
+      );
+
+      const serverTS  = firebase.firestore.FieldValue.serverTimestamp();
+      const increment = firebase.firestore.FieldValue.increment;
+
+      await db.runTransaction(async (tx) => {
+        tx.set(db.collection(COL.CHARGE_SLIPS).doc(slipId), {
+          ...slipData, total, status: "saved", createdAt: serverTS
+        });
+
+        tx.set(db.collection(COL.SALES).doc(slipId), {
+          receiptId:   slipId,
+          patientName: slipData.patientName,
+          nurseId:     slipData.nurseId,
+          nurseName:   slipData.nurseName,
+          date:        slipData.date,
+          total,
+          itemCount:   slipData.items.reduce((s, i) => s + i.quantity, 0),
+          items:       slipData.items,
+          createdAt:   serverTS
+        });
+
+        slipData.items.forEach((item) => {
+          tx.update(db.collection(COL.PRODUCTS).doc(item.productId), {
+            currentStock: increment(-item.quantity),
+            updatedAt:    serverTS
+          });
+
+          const salesDocId = `${item.productId}_${slipData.date}`;
+          tx.set(db.collection(COL.PRODUCT_SALES).doc(salesDocId), {
+            productId:   item.productId,
+            productName: item.productName,
+            date:        slipData.date,
+            soldBy:      slipData.nurseId,
+            receiptId:   slipId,
+            quantity:    increment(item.quantity),
+            createdAt:   serverTS
+          }, { merge: true });
+        });
+      });
+    }
+  </script>
+</head>
+<body>
+
+  <!-- ============================================================
+       AUTH GUARD WRAPPER
+       Hidden by default. Shown only AFTER auth confirms login.
+       This prevents the app from flashing for a second before redirect.
+       ============================================================ -->
+  <div id="appWrapper" style="display: none;" class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <h2>
+          <div class="logo-container">
+            <img src="Assets/logo-no-bg.png" alt="Logo" class="sidebar-logo">
+            <span>LUZON RENAL CARE</span>
+          </div>
+          <span id="navToggle">☰</span>
+        </h2>
+      </div>
+      <nav>
+        <!-- All menu items - will be shown/hidden based on role -->
+        <a href="#" class="active" data-page="dashboard">Dashboard</a>
+        <a href="#" data-page="inventory">Inventory</a>
+        <a href="#" data-page="trial">Patient List</a>
+        <a href="#" data-page="journals">Charge Slip</a>
+        <a href="#" data-page="accounts">Sales</a>
+        <a href="#" data-page="financials">Request</a>
+        <a href="#" data-page="adjustments">Payroll</a>
+        <a href="#" data-page="payslip">Print</a>
+        <a href="#" data-page="dialysis">Dialysis</a>
+        <a href="#" data-page="reports">Assignment</a>
+        <a href="#" data-page="settings">Settings</a>
+      </nav>
+      
+      <!-- User Profile Section -->
+      <div class="user-profile">
+        <div class="user-profile-header" id="userProfileToggle">
+          <div class="user-avatar">
+            <span id="userInitials">--</span>
+          </div>
+          <div class="user-info">
+            <div class="user-name" id="userName">Loading...</div>
+            <div class="user-role" id="userRole">...</div>
+          </div>
+          <div class="dropdown-icon">▼</div>
+        </div>
+        
+        <div class="user-dropdown" id="userDropdown">
+          <div class="dropdown-section">
+            <!-- Logout button -->
+            <button class="dropdown-item logout-btn" onclick="logout()">
+              <span class="logout-icon">🚪</span>
+              <span>Logout</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <!-- === DASHBOARD === -->
+      <div class="page active" id="dashboard">
+        <header>
+          <div class="header-top">
+            <div>
+              <h1>Dashboard</h1>
+              <p>Accounting system overview</p>
+            </div>
+            <div class="dashboard-date" id="dashboardDate">January 23, 2026</div>
+          </div>
+        </header>
+
+        <div class="inventory-overview-section">
+          <div class="section-header">
+            <h3 class="section-title">Inventory Status</h3>
+            <div class="period-selector">
+              <button class="period-btn active" data-period="today">Today</button>
+              <button class="period-btn" data-period="month">This Month</button>
+              <button class="period-btn" data-period="year">This Year</button>
+            </div>
+          </div>
+          
+          <div class="inventory-overview">
+            <div class="overview-card available-card" data-status="Available">
+              <div class="overview-content">
+                <div class="overview-label">Available Stock</div>
+                <div class="overview-value" id="dashAvailableCount">0</div>
+              </div>
+            </div>
+            <div class="overview-card low-stock-card" data-status="Low Stock">
+              <div class="overview-content">
+                <div class="overview-label">Low Stock</div>
+                <div class="overview-value" id="dashLowStockCount">0</div>
+              </div>
+            </div>
+            <div class="overview-card out-stock-card" data-status="Out of Stock">
+              <div class="overview-content">
+                <div class="overview-label">Out of Stock</div>
+                <div class="overview-value" id="dashOutStockCount">0</div>
+              </div>
+            </div>
+            <div class="overview-card expiring-card" data-status="Expiring Soon">
+              <div class="overview-content">
+                <div class="overview-label">Expiring Soon</div>
+                <div class="overview-value" id="dashExpiringCount">0</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cards">
+          <div class="card"><h3>Total Assets</h3><div class="value" id="totalAssets">₱500,000</div></div>
+          <div class="card"><h3>Liabilities</h3><div class="value" id="totalLiabilities">₱200,000</div></div>
+          <div class="card"><h3>Revenue</h3><div class="value" id="totalRevenue">₱120,000</div></div>
+        </div>
+
+        <div class="charts">
+          <div class="chart-card"><h3 id="incomeExpensesTitle">Income vs Expenses</h3><canvas id="revExp"></canvas></div>
+          <div class="chart-card"><h3 id="cashFlowTitle">Cash Flow Trends</h3><canvas id="cashFlow"></canvas></div>
+          <div class="chart-card"><h3 id="profitMarginTitle">Profit Margins</h3><canvas id="profitMargin"></canvas></div>
+        </div>
+
+        <div class="transactions">
+          <h3>Recent Transactions</h3>
+          <table>
+            <thead>
+              <tr><th>Date</th><th>Description</th><th>Amount</th><th>Status</th></tr>
+            </thead>
+            <tbody id="transactionsBody">
+              <tr><td class="date" data-label="Date">26-01-10</td><td data-label="Description">Invoice #1023</td><td data-label="Amount">₱5,000</td><td data-label="Status">Paid</td></tr>
+              <tr><td class="date" data-label="Date">26-01-11</td><td data-label="Description">Invoice #1024</td><td data-label="Amount">₱7,500</td><td data-label="Status">Unpaid</td></tr>
+              <tr><td class="date" data-label="Date">26-01-12</td><td data-label="Description">Invoice #1025</td><td data-label="Amount">₱3,200</td><td data-label="Status">Paid</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="alerts">
+          <h3>Alerts</h3>
+          <table>
+            <thead>
+              <tr><th>Invoice</th><th>Due Date</th><th>Status</th></tr>
+            </thead>
+            <tbody id="alertsBody">
+              <tr><td data-label="Invoice">#1024</td><td class="date" data-label="Due Date">26-01-15</td><td data-label="Status">Overdue</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- === INVENTORY PAGE === -->
+      <div class="page" id="inventory">
+        <div class="inventory-new-header">
+          <h2>Inventory<br>Management</h2>
+          <div class="current-date-badge" id="inventoryCurrentDate">January 24, 2026</div>
+        </div>
+
+        <div class="inventory-status-grid">
+          <div class="status-box available active" data-status="all">
+            <div class="status-label">All</div>
+            <div class="status-count" id="allCount">0</div>
+          </div>
+          <div class="status-box low" data-status="low">
+            <div class="status-label">Low Stock</div>
+            <div class="status-count" id="lowCount">0</div>
+          </div>
+          <div class="status-box out" data-status="out">
+            <div class="status-label">Out of Stock</div>
+            <div class="status-count" id="outCount">0</div>
+          </div>
+          <div class="status-box add" id="addNewProductBox">
+            <div class="status-label">Add Product</div>
+            <div class="add-icon">+</div>
+          </div>
+        </div>
+
+        <div class="inventory-search-bar">
+          <input type="text" id="inventorySearchInput" placeholder="Search products...">
+        </div>
+
+        <div class="inventory-navigation">
+          <input type="date" id="visibleDatePicker" class="visible-date-picker">
+          <div class="nav-arrows-group">
+            <button class="nav-arrow-btn" id="prevDayBtn">&lt;</button>
+            <button class="nav-arrow-btn" id="nextDayBtn">&gt;</button>
+          </div>
+        </div>
+
+        <input type="date" id="datePickerInput" class="hidden-date-picker">
+
+        <div class="inventory-products-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Product</th>
+                <th>Current Stock</th>
+                <th>Expiry Date</th>
+                <th>Sales</th>
+              </tr>
+            </thead>
+            <tbody id="inventoryProductsBody"></tbody>
+          </table>
+        </div>
+
+        <div class="restock-button-container">
+          <button id="goToRestockBtn" class="btn-restock">📦 Restock Checklist</button>
+          <button id="goToManualUpdateBtn" class="btn-manual-update">✏️ Manual Inventory Update</button>
+        </div>
+      </div>
+
+      <!-- === RESTOCK CHECKLIST PAGE === -->
+      <div class="restock-page" id="restockPage" style="display: none;">
+        <div class="restock-header">
+          <h2>Restock Checklist</h2>
+          <button id="backFromRestockBtn" class="btn-back">← Back to Inventory</button>
+        </div>
+        <div class="restock-search-filter">
+          <input type="text" id="restockSearchInput" class="restock-search-input" placeholder="🔍 Search products...">
+          <select id="restockCategoryFilter" class="restock-category-filter">
+            <option value="all">All Categories</option>
+          </select>
+        </div>
+        <div class="restock-filters">
+          <button class="restock-filter-btn active" data-filter="all">All</button>
+          <button class="restock-filter-btn" data-filter="low">Low Stock</button>
+          <button class="restock-filter-btn" data-filter="out">Out of Stock</button>
+        </div>
+        <div id="restockItemsList" class="restock-items-list"></div>
+        <div class="restock-actions">
+          <button id="deleteSelectedBtn" class="btn-delete-selected">✕</button>
+          <button id="updateStocksBtn" class="btn-update-stocks">
+            ✓ Update Stocks <span id="updateCounter">(0)</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- === MANUAL INVENTORY UPDATE PAGE === -->
+      <div class="manual-update-page" id="manualUpdatePage" style="display: none;">
+        <div class="manual-update-header">
+          <h2>Manual Inventory Update</h2>
+          <button id="backFromManualUpdateBtn" class="btn-back">← Back to Inventory</button>
+        </div>
+        <div class="restock-search-filter">
+          <input type="text" id="manualUpdateSearchInput" class="restock-search-input" placeholder="🔍 Search products...">
+          <select id="manualUpdateCategoryFilter" class="restock-category-filter">
+            <option value="all">All Categories</option>
+          </select>
+        </div>
+        <div class="manual-update-date-display">
+          <span class="date-label">Editing sales for:</span>
+          <span class="date-value" id="manualUpdateDateDisplay">January 26, 2026</span>
+        </div>
+        <div class="manual-update-list" id="manualUpdateList"></div>
+        <div class="manual-update-save-container">
+          <button id="saveManualUpdatesBtn" class="btn-save-manual-updates">Save All Changes</button>
+        </div>
+      </div>
+
+      <!-- === PATIENT LIST / LABORATORY LOGBOOK === -->
+      <div class="page" id="trial">
+        <div class="patient-list-header">
+          <h2>Laboratory Logbook</h2>
+          <button class="btn-manage-lab-types" id="manageLabTypesBtn">Manage Lab Types</button>
+        </div>
+        <div class="add-patient-form">
+          <h3>Record New Patient</h3>
+          <div class="patient-form-grid">
+            <div class="form-group">
+              <label for="patientNameInput">Patient Name</label>
+              <input type="text" id="patientNameInput" placeholder="Enter patient name" required>
+            </div>
+            <div class="form-group">
+              <label for="labTypeSelect">Laboratory Type</label>
+              <select id="labTypeSelect" required>
+                <option value="">Select Lab Type</option>
+              </select>
+            </div>
+            <div class="form-group align-end">
+              <button class="btn-add-patient" id="addPatientBtn">+ Add Patient</button>
+            </div>
+          </div>
+        </div>
+        <div class="patient-records-container">
+          <h3>Patient Records</h3>
+          <div class="table-wrapper">
+            <table class="patient-records-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Date</th>
+                  <th>Patient Name</th>
+                  <th>Lab Type</th>
+                  <th>Nurse on Duty</th>
+                  <th>Assigned</th>
+                </tr>
+              </thead>
+              <tbody id="patientRecordsBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Lab Types Management Modal -->
+      <div class="modal" id="labTypesModal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2>Manage Laboratory Types</h2>
+            <button class="modal-close" id="closeLabTypesModal">&times;</button>
+          </div>
+          <div class="lab-types-list" id="labTypesList"></div>
+          <div class="add-lab-type-form">
+            <input type="text" id="newLabTypeInput" placeholder="Enter new lab type...">
+            <button id="addLabTypeBtn">+ Add Lab Type</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- === SALES PAGE === -->
+      <div class="page" id="accounts">
+        <div class="sales-page-header">
+          <h2>Sales Records</h2>
+          <div class="sales-period-selector">
+            <button class="sales-period-btn active" data-period="today">Today</button>
+            <button class="sales-period-btn" data-period="month">This Month</button>
+            <button class="sales-period-btn" data-period="year">This Year</button>
+          </div>
+        </div>
+        <div class="sales-summary-cards">
+          <div class="sales-summary-card revenue">
+            <div class="sales-summary-label">Total Revenue</div>
+            <div class="sales-summary-value" id="salesTotalRevenue">₱0</div>
+          </div>
+          <div class="sales-summary-card transactions">
+            <div class="sales-summary-label">Transactions</div>
+            <div class="sales-summary-value" id="salesTotalTransactions">0</div>
+          </div>
+          <div class="sales-summary-card items">
+            <div class="sales-summary-label">Items Sold</div>
+            <div class="sales-summary-value" id="salesTotalItems">0</div>
+          </div>
+          <div class="sales-summary-card average">
+            <div class="sales-summary-label">Average Sale</div>
+            <div class="sales-summary-value" id="salesAverageSale">₱0</div>
+          </div>
+        </div>
+        <div class="sales-search-export">
+          <input type="text" id="salesSearchInput" class="sales-search-input" placeholder="🔍 Search by patient name, nurse, or items...">
+          <button id="exportSalesBtn" class="btn-export-sales">📊 Export to Excel</button>
+        </div>
+        <div class="sales-table-container">
+          <table class="sales-table">
+            <thead>
+              <tr>
+                <th>Date & Time</th>
+                <th>Patient Name</th>
+                <th>Nurse</th>
+                <th>Items Breakdown</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody id="salesTableBody"></tbody>
+          </table>
+        </div>
+        <div class="category-breakdown">
+          <h3>Sales by Category</h3>
+          <div class="category-breakdown-grid" id="categoryBreakdownGrid"></div>
+        </div>
+      </div>
+
+      <!-- === JOURNALS PAGE === -->
+      <div class="page" id="journals">
+        <div class="journal-responsive-layout">
+          <div class="journal-header-compact">
+            <div class="journal-nurse-info">
+              <span id="journalNurseName">Mark Cruz</span>
+              <span id="journalCurrentTime">01/23/26 - 14:30</span>
+            </div>
+            <input type="text" id="journalPatientName" class="journal-patient-input-inline" placeholder="Patient Name">
+          </div>
+          <div class="journal-current-items-compact" id="journalItemsList">
+            <div class="journal-empty-inline">No items • Tap category to start</div>
+          </div>
+          <div class="journal-selection-scrollable">
+            <div class="journal-selection-title-small" id="journalSelectionTitle">Select Category</div>
+            <div class="journal-grid-scrollable" id="journalCategoryGrid">
+              <button class="journal-grid-btn" data-category="Medicine">
+                <span class="journal-grid-icon">💊</span><span>Medicine</span>
+              </button>
+              <button class="journal-grid-btn" data-category="PPE">
+                <span class="journal-grid-icon">😷</span><span>PPE</span>
+              </button>
+              <button class="journal-grid-btn" data-category="Supplies">
+                <span class="journal-grid-icon">🩹</span><span>Supplies</span>
+              </button>
+              <button class="journal-grid-btn" data-category="Equipment">
+                <span class="journal-grid-icon">🔬</span><span>Equipment</span>
+              </button>
+              <button class="journal-grid-btn" data-category="Hygiene">
+                <span class="journal-grid-icon">🧼</span><span>Hygiene</span>
+              </button>
+              <button class="journal-grid-btn" data-category="Other">
+                <span class="journal-grid-icon">📦</span><span>Other</span>
+              </button>
+            </div>
+            <div class="journal-grid-scrollable journal-hidden" id="journalProductGrid"></div>
+          </div>
+          <div class="journal-fixed-bottom">
+            <div class="journal-qty-row">
+              <button class="journal-qty-btn-small" id="journalDecreaseQty">−</button>
+              <div class="journal-qty-num" id="journalQtyDisplay">1</div>
+              <button class="journal-qty-btn-small" id="journalIncreaseQty">+</button>
+            </div>
+            <div class="journal-action-row">
+              <button class="journal-btn-small journal-recent-btn" id="journalRecentBtn">Recent</button>
+              <button class="journal-btn-small journal-ok-btn" id="journalOkBtn" disabled>Save</button>
+              <button class="journal-btn-small journal-add-btn" id="journalAddItemBtn" disabled>Add</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- === LEAVE MANAGEMENT SYSTEM === -->
+      <div class="page" id="financials">
+        <div class="leave-dashboard" id="leaveDashboard">
+          <div class="leave-header">
+            <h2>File Request</h2>
+            <div class="leave-header-buttons">
+              <button class="btn-apply-ot" id="applyOTBtn">+ Apply OT</button>
+              <button class="btn-apply-leave" id="applyLeaveBtn">+ Apply Leave</button>
+            </div>
+          </div>
+          <div class="leave-stats">
+            <div class="leave-stat-card pending-card">
+              <div class="stat-icon">⏳</div>
+              <div class="stat-content">
+                <div class="stat-label">Pending Applications</div>
+                <div class="stat-value" id="pendingCount">0</div>
+              </div>
+            </div>
+            <div class="leave-stat-card active-card">
+              <div class="stat-icon">🏖️</div>
+              <div class="stat-content">
+                <div class="stat-label">Currently on Leave</div>
+                <div class="stat-value" id="activeLeaveCount">0</div>
+              </div>
+            </div>
+            <div class="leave-stat-card approved-card">
+              <div class="stat-icon">✅</div>
+              <div class="stat-content">
+                <div class="stat-label">Approved This Month</div>
+                <div class="stat-value" id="approvedCount">0</div>
+              </div>
+            </div>
+            <div class="leave-stat-card rejected-card">
+              <div class="stat-icon">❌</div>
+              <div class="stat-content">
+                <div class="stat-label">Rejected This Month</div>
+                <div class="stat-value" id="rejectedCount">0</div>
+              </div>
+            </div>
+          </div>
+          <div class="leave-tabs">
+            <button class="leave-tab active" data-filter="pending">Pending</button>
+            <button class="leave-tab" data-filter="active">Currently on Leave</button>
+            <button class="leave-tab" data-filter="approved">Approved</button>
+            <button class="leave-tab" data-filter="approved-ot">Approved OT</button>
+            <button class="leave-tab" data-filter="rejected">Rejected</button>
+            <button class="leave-tab" data-filter="all">All Requests</button>
+          </div>
+          <div class="leave-requests-container">
+            <div id="leaveRequestsList" class="leave-requests-list"></div>
+          </div>
+        </div>
+
+        <!-- Apply Leave Modal -->
+        <div class="modal" id="applyLeaveModal">
+          <div class="modal-content leave-modal-content">
+            <div class="modal-header">
+              <h2>Apply for Leave</h2>
+              <button class="modal-close" id="closeApplyLeaveModal">&times;</button>
+            </div>
+            <form id="applyLeaveForm">
+              <div class="form-group">
+                <label for="leaveType">Leave Type *</label>
+                <select id="leaveType" required>
+                  <option value="">Select Leave Type</option>
+                  <option value="Vacation Leave">Vacation Leave</option>
+                  <option value="Sick Leave">Sick Leave</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="leaveStartDate">Start Date *</label>
+                <input type="date" id="leaveStartDate" required>
+              </div>
+              <div class="form-group">
+                <label for="leaveEndDate">End Date *</label>
+                <input type="date" id="leaveEndDate" required>
+              </div>
+              <div class="form-group">
+                <label for="leaveDays">Number of Days</label>
+                <input type="number" id="leaveDays" readonly>
+              </div>
+              <div class="form-group">
+                <label for="leaveReason">Reason *</label>
+                <textarea id="leaveReason" rows="4" placeholder="Please provide reason for leave..." required></textarea>
+              </div>
+              <div class="leave-balance-info" id="leaveBalanceInfo"></div>
+              <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="cancelApplyLeave">Cancel</button>
+                <button type="submit" class="btn-primary">Submit Application</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- Apply OT Modal -->
+        <div class="modal" id="applyOTModal">
+          <div class="modal-content leave-modal-content">
+            <div class="modal-header">
+              <h2>Apply for Overtime</h2>
+              <button class="modal-close" id="closeApplyOTModal">&times;</button>
+            </div>
+            <form id="applyOTForm">
+              <div class="form-group">
+                <label for="otDate">Date *</label>
+                <input type="date" id="otDate" required>
+              </div>
+              <div class="form-group">
+                <label for="otTimeIn">Time In *</label>
+                <input type="time" id="otTimeIn" required>
+              </div>
+              <div class="form-group">
+                <label for="otTimeOut">Time Out *</label>
+                <input type="time" id="otTimeOut" required>
+              </div>
+              <div class="form-group">
+                <label>Total OT Hours</label>
+                <div class="ot-hours-display" id="otHoursDisplay">
+                  <span class="hours-value">0.0</span> hours
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="otReason">Reason for Overtime *</label>
+                <textarea id="otReason" rows="4" placeholder="Please provide reason for overtime work..." required></textarea>
+              </div>
+              <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="cancelApplyOT">Cancel</button>
+                <button type="submit" class="btn-primary">Submit Application</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- View Leave Details Modal -->
+        <div class="modal" id="viewLeaveModal">
+          <div class="modal-content leave-modal-content">
+            <div class="modal-header">
+              <h2>Leave Request Details</h2>
+              <button class="modal-close" id="closeViewLeaveModal">&times;</button>
+            </div>
+            <div id="leaveDetailsContent"></div>
+            <div class="modal-actions" id="leaveActionButtons"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- === PAYROLL PAGE === -->
+      <div class="page" id="adjustments">
+        <div class="mobile-not-supported">
+          <div class="mobile-not-supported-icon">💻</div>
+          <div class="mobile-not-supported-title">Desktop Only</div>
+          <div class="mobile-not-supported-message">
+            The Payroll Management System is optimized for desktop use only. 
+            Please access this page from a desktop or laptop computer for the best experience.
+            <br><br>
+            Mobile support is not available for this feature.
+          </div>
+        </div>
+        <div class="payroll-container">
+          <div class="payroll-header">
+            <div class="payroll-title-row">
+              <h1 class="payroll-title">Payroll Management System</h1>
+              <div class="payroll-date" id="payrollCurrentDate">January 29, 2026</div>
+            </div>
+            <div class="payroll-controls">
+              <div class="control-group">
+                <label class="control-label">Payroll Period</label>
+                <select class="control-select" id="payrollPeriodSelect" onchange="updatePayrollPeriod()">
+                  <option value="1st">1st (15th)</option>
+                  <option value="2nd">2nd (30th)</option>
+                </select>
+              </div>
+              <div class="control-group">
+                <label class="control-label">Month</label>
+                <select class="control-select" id="payrollMonthSelect">
+                  <option value="january" selected>January</option>
+                  <option value="february">February</option>
+                  <option value="march">March</option>
+                  <option value="april">April</option>
+                  <option value="may">May</option>
+                  <option value="june">June</option>
+                  <option value="july">July</option>
+                  <option value="august">August</option>
+                  <option value="september">September</option>
+                  <option value="october">October</option>
+                  <option value="november">November</option>
+                  <option value="december">December</option>
+                </select>
+              </div>
+              <div class="control-group">
+                <label class="control-label">Year</label>
+                <select class="control-select" id="payrollYearSelect">
+                  <option value="2026" selected>2026</option>
+                  <option value="2025">2025</option>
+                  <option value="2024">2024</option>
+                </select>
+              </div>
+            </div>
+            <div class="payroll-action-buttons">
+              <button class="payroll-btn payroll-btn-save" id="payrollSaveBtn" onclick="savePayrollData()">Save</button>
+              <button class="payroll-btn payroll-btn-manage" onclick="openManageSettings()">Manage</button>
+              <button class="payroll-btn payroll-btn-export" onclick="exportPayrollData()">Export</button>
+            </div>
+          </div>
+          <div class="payroll-tabs-container">
+            <div class="payroll-tabs">
+              <button class="payroll-tab active" onclick="switchPayrollTab('attendance')">Attendance</button>
+              <button class="payroll-tab" onclick="switchPayrollTab('overtime')">Over Time</button>
+              <button class="payroll-tab" onclick="switchPayrollTab('payroll')">Payroll</button>
+              <button class="payroll-tab" onclick="switchPayrollTab('history')">History</button>
+            </div>
+            <div class="payroll-sort-container">
+              <select class="payroll-sort-select" id="payrollSortSelect" onchange="sortPayrollEmployees()">
+                <option value="name">Sort By: Name</option>
+                <option value="department">Sort By: Department</option>
+                <option value="id">Sort By: ID</option>
+              </select>
+            </div>
+          </div>
+          <div id="payrollAttendanceTab" class="payroll-tab-content active">
+            <div id="payrollAttendanceContent">
+              <div class="payroll-import-zone" id="payrollImportZone" 
+                   onclick="document.getElementById('attendanceFileInput').click()"
+                   ondragover="handleDragOver(event)"
+                   ondragenter="handleDragEnter(event)"
+                   ondragleave="handleDragLeave(event)"
+                   ondrop="handleFileDrop(event)">
+                <input type="file" id="attendanceFileInput" accept=".xlsx,.xls,.csv" style="display: none;" onchange="handleAttendanceImport(event)">
+                <div class="payroll-import-icon">📄</div>
+                <div class="payroll-import-title">Import Attendance</div>
+                <div class="payroll-import-subtitle">Click to browse or drag and drop your file here...</div>
+              </div>
+            </div>
+          </div>
+          <div id="payrollOvertimeTab" class="payroll-tab-content">
+  <div id="payrollOvertimeContent">
+    <div class="ot-empty-state">
+      <div class="ot-empty-icon">⏰</div>
+      <div class="ot-empty-title">No Overtime Data</div>
+      <div class="ot-empty-message">Import attendance data to view approved overtime records</div>
+    </div>
+  </div>
+</div>
+         <div id="payrollPayrollTab" class="payroll-tab-content">
+        <div id="payrollPayrollContent">
+          <div class="payroll-import-zone">
+            <div class="payroll-import-icon">💰</div>
+            <div class="payroll-import-title">Payroll Calculation</div>
+            <div class="payroll-import-subtitle">Import attendance data first, then calculate payroll</div>
+            <button class="payroll-btn payroll-btn-primary" onclick="calculatePayroll()" style="margin-top: 1.5rem;">
+              💰 Calculate Payroll
+            </button>
+          </div>
+        </div>
+      </div>
+          <div id="payrollHistoryTab" class="payroll-tab-content">
+            <div id="payrollHistoryContent">
+              <div class="payroll-import-zone">
+                <div class="payroll-import-icon">📋</div>
+                <div class="payroll-import-title">Payroll History</div>
+                <div class="payroll-import-subtitle">No payroll history available</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- === PRINT PAGE === -->
+      <div class="page" id="payslip">
+        <div class="print-container">
+          <div class="print-header">
+            <div>
+              <h1 class="print-title">Print Documents</h1>
+              <div class="print-date" id="printCurrentDate">January 29, 2026</div>
+            </div>
+            <button class="btn-printer-connection" id="printerConnectionBtn" onclick="togglePrinterConnection()">
+              <span class="connection-icon" id="connectionIcon">🔴</span>
+              <span class="connection-text" id="connectionText">Not Connected</span>
+            </button>
+          </div>
+          <div class="print-import-zone" id="printImportZone" 
+              onclick="document.getElementById('printFileInput').click()"
+              ondragover="handlePrintDragOver(event)"
+              ondragenter="handlePrintDragEnter(event)"
+              ondragleave="handlePrintDragLeave(event)"
+              ondrop="handlePrintFileDrop(event)">
+            <input type="file" id="printFileInput" accept=".xlsx,.xls,.pdf" style="display: none;" onchange="handlePrintFileImport(event)">
+            <div class="print-import-icon">🖨️</div>
+            <div class="print-import-title">Drop files here to print</div>
+            <div class="print-import-subtitle">Drag and drop your Excel or PDF files, or click to browse</div>
+            <div class="print-supported-formats">Supported: .xlsx, .xls, .pdf</div>
+          </div>
+          <div class="print-queue-section" id="printQueueSection" style="display: none;">
+            <h3>Print Queue</h3>
+            <div class="print-queue-list" id="printQueueList"></div>
+            <div class="print-actions">
+              <button class="btn-clear-queue" onclick="clearPrintQueue()">Clear Queue</button>
+              <button class="btn-print-all" onclick="printAllDocuments()">🖨️ Print All</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- DIALYSIS MANAGEMENT PAGE -->
+<!-- Add this to your main HTML file inside the body -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="page" id="dialysis">
+  <!-- Header -->
+  <div class="page-header">
+    <h1>Dialysis Management</h1>
+    <p>Monitor and manage dialysis sessions, patients, and machines</p>
+  </div>
+  
+  <!-- Stats Cards -->
+  <div class="dialysis-stats-grid">
+    <div class="dialysis-stat-card">
+      <div class="stat-icon">▶️</div>
+      <div class="stat-content">
+        <div class="stat-label">Active Sessions</div>
+        <div class="stat-value" id="activeSessionsCount">0</div>
+      </div>
+    </div>
+    
+    <div class="dialysis-stat-card">
+      <div class="stat-icon">📅</div>
+      <div class="stat-content">
+        <div class="stat-label">Scheduled Today</div>
+        <div class="stat-value" id="scheduledSessionsCount">0</div>
+      </div>
+    </div>
+    
+    <div class="dialysis-stat-card">
+      <div class="stat-icon">👥</div>
+      <div class="stat-content">
+        <div class="stat-label">Active Patients</div>
+        <div class="stat-value" id="dialysisPatientsCount">0</div>
+      </div>
+    </div>
+    
+    <div class="dialysis-stat-card">
+      <div class="stat-icon">🏥</div>
+      <div class="stat-content">
+        <div class="stat-label">Available Machines</div>
+        <div class="stat-value" id="availableMachinesCount">0</div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- View Tabs -->
+  <div class="dialysis-view-tabs">
+    <button class="dialysis-view-tab active" data-view="sessions">Sessions</button>
+    <button class="dialysis-view-tab" data-view="patients">Patients</button>
+    <button class="dialysis-view-tab" data-view="machines">Machines</button>
+    <button class="dialysis-view-tab" data-view="schedule">Schedule</button>
+    <button class="dialysis-view-tab" data-view="reports">Reports</button>
+  </div>
+  
+  <!-- Session Filters (shown in sessions view) -->
+  <div class="dialysis-filter-tabs" id="sessionFilterTabs">
+    <button class="dialysis-filter-tab active" data-filter="active">Active</button>
+    <button class="dialysis-filter-tab" data-filter="scheduled">Scheduled</button>
+    <button class="dialysis-filter-tab" data-filter="completed">Completed</button>
+  </div>
+  
+  <!-- Main Content Area -->
+  <div id="dialysisMainContent">
+    <!-- Content will be rendered here by JavaScript -->
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PRE-DIALYSIS VITALS MODAL -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="modal" id="preVitalsModal">
+  <div class="modal-content" style="max-width: 600px;">
+    <div class="modal-header">
+      <h2>📋 Pre-Dialysis Vitals</h2>
+      <button class="modal-close close-dialysis-modal">&times;</button>
+    </div>
+    
+    <div class="modal-body">
+      <div class="session-info-banner">
+        <strong id="preVitalsPatientName"></strong>
+        <span id="preVitalsMachine"></span>
+      </div>
+      
+      <div class="vitals-form">
+        <div class="form-group">
+          <label>Weight (kg)</label>
+          <input type="number" id="preWeight" step="0.1" placeholder="65.5" required>
+        </div>
+        
+        <div class="form-group">
+          <label>Temperature (°C)</label>
+          <input type="number" id="preTemp" step="0.1" placeholder="36.5" required>
+        </div>
+        
+        <div class="form-group">
+          <label>Pulse (bpm)</label>
+          <input type="number" id="prePulse" placeholder="72" required>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label>BP Systolic</label>
+            <input type="number" id="preBPSystolic" placeholder="120" required>
+          </div>
+          <div class="form-group">
+            <label>BP Diastolic</label>
+            <input type="number" id="preBPDiastolic" placeholder="80" required>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="modal-footer">
+      <button class="btn-secondary close-dialysis-modal">Cancel</button>
+      <button class="btn-primary" id="savePreVitalsBtn">▶ Start Session</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- POST-DIALYSIS VITALS MODAL -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="modal" id="postVitalsModal">
+  <div class="modal-content" style="max-width: 600px;">
+    <div class="modal-header">
+      <h2>📋 Post-Dialysis Vitals</h2>
+      <button class="modal-close close-dialysis-modal">&times;</button>
+    </div>
+    
+    <div class="modal-body">
+      <div class="session-info-banner">
+        <strong id="postVitalsPatientName"></strong>
+        <span id="postVitalsMachine"></span>
+      </div>
+      
+      <div class="vitals-form">
+        <div class="form-group">
+          <label>Weight (kg)</label>
+          <input type="number" id="postWeight" step="0.1" placeholder="63.0" required>
+        </div>
+        
+        <div class="form-group">
+          <label>Temperature (°C)</label>
+          <input type="number" id="postTemp" step="0.1" placeholder="36.5" required>
+        </div>
+        
+        <div class="form-group">
+          <label>Pulse (bpm)</label>
+          <input type="number" id="postPulse" placeholder="75" required>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label>BP Systolic</label>
+            <input type="number" id="postBPSystolic" placeholder="115" required>
+          </div>
+          <div class="form-group">
+            <label>BP Diastolic</label>
+            <input type="number" id="postBPDiastolic" placeholder="75" required>
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label>Complications (if any)</label>
+          <textarea id="sessionComplications" rows="3" placeholder="Enter any complications during session..."></textarea>
+        </div>
+        
+        <div class="form-group">
+          <label>Notes</label>
+          <textarea id="sessionNotes" rows="3" placeholder="Additional notes..."></textarea>
+        </div>
+      </div>
+    </div>
+    
+    <div class="modal-footer">
+      <button class="btn-secondary close-dialysis-modal">Cancel</button>
+      <button class="btn-primary" id="savePostVitalsBtn">⏹ End Session</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD PATIENT MODAL -->
+<!-- Add this after the existing Post-Vitals Modal in your HTML -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="modal" id="addPatientModal">
+  <div class="modal-content" style="max-width: 700px;">
+    <div class="modal-header">
+      <h2>➕ Add New Patient</h2>
+      <button class="modal-close close-dialysis-modal">&times;</button>
+    </div>
+    
+    <form id="addPatientForm" onsubmit="saveNewPatient(event)">
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Full Name *</label>
+            <input type="text" id="newPatientName" placeholder="Juan Dela Cruz" required>
+          </div>
+          
+          <div class="form-group">
+            <label>Age *</label>
+            <input type="number" id="newPatientAge" placeholder="55" min="1" max="120" required>
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label>Gender *</label>
+            <select id="newPatientGender" required>
+              <option value="">Select Gender</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label>Blood Type *</label>
+            <select id="newPatientBloodType" required>
+              <option value="">Select Blood Type</option>
+              <option value="A+">A+</option>
+              <option value="A-">A-</option>
+              <option value="B+">B+</option>
+              <option value="B-">B-</option>
+              <option value="AB+">AB+</option>
+              <option value="AB-">AB-</option>
+              <option value="O+">O+</option>
+              <option value="O-">O-</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label>Dialysis Schedule *</label>
+            <select id="newPatientSchedule" required>
+              <option value="">Select Schedule</option>
+              <option value="MWF">MWF (Mon/Wed/Fri)</option>
+              <option value="TTS">TTS (Tue/Thu/Sat)</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label>Dry Weight (kg) *</label>
+            <input type="number" id="newPatientDryWeight" placeholder="65.0" step="0.1" min="20" max="200" required>
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label>Access Type *</label>
+            <select id="newPatientAccessType" required>
+              <option value="">Select Access Type</option>
+              <option value="AVF">AVF (Arteriovenous Fistula)</option>
+              <option value="AVG">AVG (Arteriovenous Graft)</option>
+              <option value="Catheter">Catheter</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label>Contact Number *</label>
+            <input type="tel" id="newPatientContact" placeholder="0917-123-4567" required>
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label>Diagnosis *</label>
+          <input type="text" id="newPatientDiagnosis" placeholder="CKD Stage 5, ESRD, etc." required>
+        </div>
+        
+        <div class="form-group">
+          <label>Emergency Contact</label>
+          <input type="text" id="newPatientEmergency" placeholder="Name - Contact Number">
+        </div>
+        
+        <div class="form-group">
+          <label>Notes</label>
+          <textarea id="newPatientNotes" rows="3" placeholder="Additional notes, allergies, special instructions..."></textarea>
+        </div>
+      </div>
+      
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary close-dialysis-modal">Cancel</button>
+        <button type="submit" class="btn-primary">💾 Save Patient</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- EDIT PATIENT MODAL -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="modal" id="editPatientModal">
+  <div class="modal-content" style="max-width: 700px;">
+    <div class="modal-header">
+      <h2>✏️ Edit Patient</h2>
+      <button class="modal-close close-dialysis-modal">&times;</button>
+    </div>
+    
+    <form id="editPatientForm" onsubmit="saveEditedPatient(event)">
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Full Name *</label>
+            <input type="text" id="editPatientName" required>
+          </div>
+          
+          <div class="form-group">
+            <label>Age *</label>
+            <input type="number" id="editPatientAge" min="1" max="120" required>
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label>Gender *</label>
+            <select id="editPatientGender" required>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label>Blood Type *</label>
+            <select id="editPatientBloodType" required>
+              <option value="A+">A+</option>
+              <option value="A-">A-</option>
+              <option value="B+">B+</option>
+              <option value="B-">B-</option>
+              <option value="AB+">AB+</option>
+              <option value="AB-">AB-</option>
+              <option value="O+">O+</option>
+              <option value="O-">O-</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label>Dialysis Schedule *</label>
+            <select id="editPatientSchedule" required>
+              <option value="MWF">MWF (Mon/Wed/Fri)</option>
+              <option value="TTS">TTS (Tue/Thu/Sat)</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label>Dry Weight (kg) *</label>
+            <input type="number" id="editPatientDryWeight" step="0.1" min="20" max="200" required>
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label>Access Type *</label>
+            <select id="editPatientAccessType" required>
+              <option value="AVF">AVF (Arteriovenous Fistula)</option>
+              <option value="AVG">AVG (Arteriovenous Graft)</option>
+              <option value="Catheter">Catheter</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label>Contact Number *</label>
+            <input type="tel" id="editPatientContact" required>
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label>Diagnosis *</label>
+          <input type="text" id="editPatientDiagnosis" required>
+        </div>
+        
+        <div class="form-group">
+          <label>Emergency Contact</label>
+          <input type="text" id="editPatientEmergency">
+        </div>
+        
+        <div class="form-group">
+          <label>Status *</label>
+          <select id="editPatientStatus" required>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label>Notes</label>
+          <textarea id="editPatientNotes" rows="3"></textarea>
+        </div>
+      </div>
+      
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary close-dialysis-modal">Cancel</button>
+        <button type="submit" class="btn-primary">💾 Update Patient</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- ADD MACHINE MODAL -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="modal" id="addMachineModal">
+  <div class="modal-content" style="max-width: 600px;">
+    <div class="modal-header">
+      <h2>➕ Add New Machine</h2>
+      <button class="modal-close close-dialysis-modal">&times;</button>
+    </div>
+    
+    <form id="addMachineForm" onsubmit="saveNewMachine(event)">
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Machine Number *</label>
+            <input type="text" id="newMachineNumber" placeholder="001" required>
+          </div>
+          
+          <div class="form-group">
+            <label>Brand *</label>
+            <input type="text" id="newMachineBrand" placeholder="Fresenius" required>
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label>Model *</label>
+            <input type="text" id="newMachineModel" placeholder="5008S" required>
+          </div>
+          
+          <div class="form-group">
+            <label>Serial Number</label>
+            <input type="text" id="newMachineSerial" placeholder="SN123456">
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label>Location</label>
+          <input type="text" id="newMachineLocation" placeholder="Bay 1, Station A">
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label>Purchase Date</label>
+            <input type="date" id="newMachinePurchaseDate">
+          </div>
+          
+          <div class="form-group">
+            <label>Last Maintenance</label>
+            <input type="date" id="newMachineLastMaintenance">
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label>Next Maintenance</label>
+          <input type="date" id="newMachineNextMaintenance">
+        </div>
+        
+        <div class="form-group">
+          <label>Notes</label>
+          <textarea id="newMachineNotes" rows="3" placeholder="Machine specifications, maintenance history..."></textarea>
+        </div>
+      </div>
+      
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary close-dialysis-modal">Cancel</button>
+        <button type="submit" class="btn-primary">💾 Save Machine</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- EDIT MACHINE MODAL -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="modal" id="editMachineModal">
+  <div class="modal-content" style="max-width: 600px;">
+    <div class="modal-header">
+      <h2>✏️ Edit Machine</h2>
+      <button class="modal-close close-dialysis-modal">&times;</button>
+    </div>
+    
+    <form id="editMachineForm" onsubmit="saveEditedMachine(event)">
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Machine Number *</label>
+            <input type="text" id="editMachineNumber" required>
+          </div>
+          
+          <div class="form-group">
+            <label>Brand *</label>
+            <input type="text" id="editMachineBrand" required>
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label>Model *</label>
+            <input type="text" id="editMachineModel" required>
+          </div>
+          
+          <div class="form-group">
+            <label>Serial Number</label>
+            <input type="text" id="editMachineSerial">
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label>Location</label>
+          <input type="text" id="editMachineLocation">
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label>Purchase Date</label>
+            <input type="date" id="editMachinePurchaseDate">
+          </div>
+          
+          <div class="form-group">
+            <label>Last Maintenance</label>
+            <input type="date" id="editMachineLastMaintenance">
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label>Next Maintenance</label>
+          <input type="date" id="editMachineNextMaintenance">
+        </div>
+        
+        <div class="form-group">
+          <label>Status *</label>
+          <select id="editMachineStatus" required>
+            <option value="available">Available</option>
+            <option value="in-use">In Use</option>
+            <option value="maintenance">Maintenance</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label>Notes</label>
+          <textarea id="editMachineNotes" rows="3"></textarea>
+        </div>
+      </div>
+      
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary close-dialysis-modal">Cancel</button>
+        <button type="submit" class="btn-primary">💾 Update Machine</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SCHEDULE SESSION MODAL -->
+<!-- Add this to your HTML after the existing dialysis modals -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="modal" id="scheduleSessionModal">
+  <div class="modal-content" style="max-width: 600px;">
+    <div class="modal-header">
+      <h2>📅 Schedule Dialysis Session</h2>
+      <button class="modal-close close-dialysis-modal">&times;</button>
+    </div>
+    
+    <form id="scheduleSessionForm" onsubmit="saveScheduledSession(event)">
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Date *</label>
+            <input type="date" id="scheduleSessionDate" required>
+          </div>
+          
+          <div class="form-group">
+            <label>Time *</label>
+            <select id="scheduleSessionTime" required onchange="updateAvailableMachines(document.getElementById('scheduleSessionDate').value, this.value)">
+              <option value="08:00">08:00 AM</option>
+              <option value="10:00">10:00 AM</option>
+              <option value="12:00">12:00 PM</option>
+              <option value="14:00">02:00 PM</option>
+              <option value="16:00">04:00 PM</option>
+              <option value="18:00">06:00 PM</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label>Patient *</label>
+          <select id="scheduleSessionPatient" required>
+            <option value="">Select Patient</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label>Machine *</label>
+          <select id="scheduleSessionMachine" required>
+            <option value="">Select Machine</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label>Duration (minutes) *</label>
+          <select id="scheduleSessionDuration" required>
+            <option value="180">3 hours (180 mins)</option>
+            <option value="210">3.5 hours (210 mins)</option>
+            <option value="240" selected>4 hours (240 mins)</option>
+            <option value="270">4.5 hours (270 mins)</option>
+            <option value="300">5 hours (300 mins)</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label>Notes</label>
+          <textarea id="scheduleSessionNotes" rows="3" placeholder="Special instructions or notes for this session..."></textarea>
+        </div>
+      </div>
+      
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary close-dialysis-modal">Cancel</button>
+        <button type="submit" class="btn-primary">📅 Schedule Session</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- DAY SCHEDULE MODAL (Shows all sessions for a specific day) -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="modal" id="dayScheduleModal">
+  <div class="modal-content" style="max-width: 700px;">
+    <div class="modal-header">
+      <h2 id="dayScheduleDate">Sessions for Today</h2>
+      <button class="modal-close" onclick="closeDayScheduleModal()">&times;</button>
+    </div>
+    
+    <div class="modal-body">
+      <div id="daySessionsList" class="day-sessions-list">
+        <!-- Sessions will be rendered here -->
+      </div>
+    </div>
+    
+    <div class="modal-footer">
+      <button type="button" class="btn-secondary" onclick="closeDayScheduleModal()">Close</button>
+      <button type="button" class="btn-primary" onclick="addSessionFromDayModal()">+ Add Session</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PATIENT HISTORY MODAL -->
+<!-- Shows complete patient medical history and session records -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="modal modal-large" id="patientHistoryModal">
+  <div class="modal-content" style="max-width: 900px;">
+    <div class="modal-header">
+      <h2>📋 Patient History</h2>
+      <button class="modal-close" onclick="closePatientHistoryModal()">&times;</button>
+    </div>
+    
+    <div class="modal-body">
+      <!-- Patient Info Summary -->
+      <div class="patient-info-summary">
+        <div class="info-header">
+          <h3 id="historyPatientName">Patient Name</h3>
+          <div class="patient-meta">
+            <span id="historyPatientAge">Age</span> • 
+            <span id="historyPatientGender">Gender</span>
+          </div>
+        </div>
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">Schedule:</span>
+            <span id="historyPatientSchedule" class="info-value">MWF</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Dry Weight:</span>
+            <span id="historyPatientDryWeight" class="info-value">65 kg</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Access Type:</span>
+            <span id="historyPatientAccessType" class="info-value">AVF</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Diagnosis:</span>
+            <span id="historyPatientDiagnosis" class="info-value">CKD Stage 5</span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Medical Records Section -->
+      <div class="history-section">
+        <h3>🏥 Medical Information</h3>
+        <div class="medical-records-grid">
+          <div class="medical-record-card">
+            <h4>Allergies</h4>
+            <div id="historyAllergies" class="medical-content">
+              <!-- Allergies will be populated here -->
+            </div>
+          </div>
+          <div class="medical-record-card">
+            <h4>Current Medications</h4>
+            <div id="historyMedications" class="medical-content">
+              <!-- Medications will be populated here -->
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Session History Section -->
+      <div class="history-section">
+        <h3>📊 Session History (Last 10)</h3>
+        <div id="historySessionsList" class="history-sessions-list">
+          <!-- Sessions will be populated here -->
+        </div>
+      </div>
+    </div>
+    
+    <div class="modal-footer">
+      <button type="button" class="btn-secondary" onclick="closePatientHistoryModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- MONITOR SESSION MODAL -->
+<!-- Real-time monitoring with hourly vitals tracking -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="modal modal-large" id="monitorSessionModal">
+  <div class="modal-content" style="max-width: 800px;">
+    <div class="modal-header">
+      <h2>📊 Monitor Session</h2>
+      <button class="modal-close" onclick="closeMonitorModal()">&times;</button>
+    </div>
+    
+    <div class="modal-body">
+      <!-- Session Info Banner -->
+      <div class="monitor-session-banner">
+        <div class="banner-item">
+          <span class="banner-label">Patient:</span>
+          <span id="monitorPatientName" class="banner-value">Patient Name</span>
+        </div>
+        <div class="banner-item">
+          <span class="banner-label">Machine:</span>
+          <span id="monitorMachineNumber" class="banner-value">001</span>
+        </div>
+        <div class="banner-item">
+          <span class="banner-label">Start Time:</span>
+          <span id="monitorSessionTime" class="banner-value">08:00 AM</span>
+        </div>
+      </div>
+      
+      <!-- Previous Checks -->
+      <div class="monitoring-section">
+        <h3>Previous Vitals Checks</h3>
+        <div id="monitoringRecordsList" class="monitoring-records">
+          <!-- Monitoring records will be populated here -->
+        </div>
+      </div>
+      
+      <!-- Add New Check -->
+      <div class="monitoring-section">
+        <h3>➕ Record New Vitals Check</h3>
+        <form id="addMonitoringForm" onsubmit="saveMonitoringCheck(event)">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Blood Pressure *</label>
+              <input type="text" id="monitorBloodPressure" placeholder="120/80" required>
+            </div>
+            
+            <div class="form-group">
+              <label>Pulse (bpm) *</label>
+              <input type="number" id="monitorPulse" placeholder="75" min="40" max="200" required>
+            </div>
+            
+            <div class="form-group">
+              <label>Temperature (°C) *</label>
+              <input type="number" id="monitorTemperature" placeholder="36.5" step="0.1" min="35" max="42" required>
+            </div>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label>Ultrafiltration Rate</label>
+              <input type="text" id="monitorUFR" placeholder="500 ml/hr">
+            </div>
+            
+            <div class="form-group">
+              <label>Complications</label>
+              <input type="text" id="monitorComplications" placeholder="None">
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label>Notes</label>
+            <textarea id="monitorNotes" rows="2" placeholder="Patient status, observations..."></textarea>
+          </div>
+          
+          <div class="form-actions">
+            <button type="submit" class="btn-primary">💾 Record Check</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    
+    <div class="modal-footer">
+      <button type="button" class="btn-secondary" onclick="closeMonitorModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SESSION DETAILS MODAL -->
+<!-- Complete view of a single session with all vitals -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="modal" id="sessionDetailsModal">
+  <div class="modal-content" style="max-width: 700px;">
+    <div class="modal-header">
+      <h2>👁️ Session Details</h2>
+      <button class="modal-close" onclick="closeSessionDetailsModal()">&times;</button>
+    </div>
+    
+    <div class="modal-body">
+      <!-- Session Overview -->
+      <div class="details-section">
+        <h3>Session Information</h3>
+        <div class="details-grid">
+          <div class="detail-item">
+            <span class="detail-label">Patient:</span>
+            <span id="detailsPatientName" class="detail-value">Patient Name</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Machine:</span>
+            <span id="detailsMachineNumber" class="detail-value">HD-001</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Date:</span>
+            <span id="detailsSessionDate" class="detail-value">2026-02-08</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Time:</span>
+            <span id="detailsSessionTime" class="detail-value">08:00 AM</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Duration:</span>
+            <span id="detailsDuration" class="detail-value">240 minutes</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Status:</span>
+            <span id="detailsStatus" class="detail-value status-badge">Completed</span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Pre-Dialysis Vitals -->
+      <div class="details-section">
+        <h3>Pre-Dialysis Vitals</h3>
+        <div id="detailsPreVitals" class="vitals-display">
+          <!-- Pre-vitals will be populated here -->
+        </div>
+      </div>
+      
+      <!-- Post-Dialysis Vitals -->
+      <div class="details-section">
+        <h3>Post-Dialysis Vitals</h3>
+        <div id="detailsPostVitals" class="vitals-display">
+          <!-- Post-vitals will be populated here -->
+        </div>
+      </div>
+      
+      <!-- Session Notes -->
+      <div class="details-section">
+        <h3>Notes</h3>
+        <div id="detailsNotes" class="notes-display">
+          <!-- Notes will be populated here -->
+        </div>
+      </div>
+    </div>
+    
+    <div class="modal-footer">
+      <button type="button" class="btn-secondary" onclick="closeSessionDetailsModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+      <!-- === PATIENT ASSIGNMENT PAGE === -->
+      <div class="page" id="reports">
+        <div class="assignment-container">
+          <div class="assignment-header">
+            <div>
+              <h1 class="assignment-title">Patient Assignment</h1>
+              <p class="assignment-subtitle">Assign yourself to pending patients</p>
+            </div>
+            <div class="assignment-date" id="assignmentCurrentDate">January 30, 2026</div>
+          </div>
+          <div class="assignment-tabs">
+            <button class="assignment-tab active" data-filter="pending" onclick="switchAssignmentTab('pending')">
+              Pending Assignments
+              <span class="assignment-count" id="pendingAssignmentCount">0</span>
+            </button>
+            <button class="assignment-tab" data-filter="assigned" onclick="switchAssignmentTab('assigned')">
+              My Assignments
+              <span class="assignment-count" id="myAssignmentCount">0</span>
+            </button>
+            <button class="assignment-tab" data-filter="completed" onclick="switchAssignmentTab('completed')">
+              Completed
+              <span class="assignment-count" id="completedAssignmentCount">0</span>
+            </button>
+          </div>
+          <div class="assignment-search">
+            <input type="text" id="assignmentSearchInput" placeholder="🔍 Search by patient name or lab type..." />
+          </div>
+          <div class="assignment-list" id="assignmentList"></div>
+        </div>
+      </div>
+
+      <!-- === SETTINGS PAGE === -->
+      <div class="page" id="settings">
+        <div class="under-development-container">
+          <div class="under-development-icon">🚧</div>
+          <h1 class="under-development-title">Under Development</h1>
+          <p class="under-development-message">This feature is currently being developed.</p>
+        </div>
+      </div>
+    </main>
+  </div><!-- end #appWrapper -->
+
+  <!-- ============================================================
+       MODALS (outside appWrapper so they layer correctly)
+       ============================================================ -->
+
+  <!-- Payroll Manage Settings Modal -->
+  <div class="payroll-manage-modal" id="payrollManageModal">
+    <div class="payroll-manage-content" style="max-width: 700px;">
+      <div class="payroll-manage-header">
+        <h2>Manage Payroll Settings</h2>
+        <button class="payroll-manage-close" onclick="closeManageSettings()">×</button>
+      </div>
+      <div class="manage-tabs" style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 2px solid #e5e7eb;">
+        <button class="manage-tab-btn active" onclick="switchManageTab('departments')" data-tab="departments">👥 Departments</button>
+        <button class="manage-tab-btn" onclick="switchManageTab('presets')" data-tab="presets">⏰ Time Presets</button>
+      </div>
+      <div id="manageDepartmentsTab" class="manage-tab-content active">
+        <div style="margin-bottom: 1rem;">
+          <p style="color: #6b7280; font-size: 0.9rem; margin: 0;">Assign and manage employee departments. Changes will be reflected throughout the payroll system.</p>
+        </div>
+        <div id="employeeDepartmentList" style="max-height: 400px; overflow-y: auto;"></div>
+      </div>
+      <div id="managePresetsTab" class="manage-tab-content" style="display: none;">
+        <div style="margin-bottom: 1rem;">
+          <p style="color: #6b7280; font-size: 0.9rem; margin: 0;">Manage required time presets for attendance tracking.</p>
+        </div>
+        <div class="preset-list" id="presetList"></div>
+        <button class="btn-preset-add" onclick="addNewPreset()">+ Add New Preset</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Product Modal -->
+  <div class="modal" id="addProductModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Add Product</h2>
+        <button class="modal-close" id="closeModal">&times;</button>
+      </div>
+      <form id="addProductForm">
+        <div class="form-group">
+          <label for="productDate">Date</label>
+          <input type="date" id="productDate" required>
+        </div>
+        <div class="form-group">
+          <label for="productCategory">Category</label>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <select id="productCategory" required style="flex: 1;">
+              <option value="">Select Category</option>
+            </select>
+            <button type="button" id="manageCategoriesBtn" style="padding: 0.6rem; border: 1px solid #d1d5db; background: white; color: #374151; border-radius: 6px; cursor: pointer; white-space: nowrap;">Manage</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="productName">Product Name</label>
+          <input type="text" id="productName" required>
+        </div>
+        <div class="form-group">
+          <label for="productPrice">Price</label>
+          <input type="number" id="productPrice" step="0.01" required>
+        </div>
+        <div class="form-group">
+          <label for="productExpiry">Expiry</label>
+          <input type="date" id="productExpiry" required>
+        </div>
+        <div class="form-group">
+          <label for="productQty">Quantity</label>
+          <input type="number" id="productQty" min="0">
+        </div>
+        <div class="form-group">
+          <label for="productStatus">Status</label>
+          <select id="productStatus" required>
+            <option value="Available">Available</option>
+            <option value="Low Stock">Low Stock</option>
+            <option value="Out of Stock">Out of Stock</option>
+          </select>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn-cancel" id="cancelBtn">Cancel</button>
+          <button type="submit" class="btn-submit">Add Product</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Category Management Modal -->
+  <div class="modal" id="categoryModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Manage Categories</h2>
+        <button class="modal-close" id="closeCategoryModal">&times;</button>
+      </div>
+      <div class="category-list" id="categoryList"></div>
+      <div class="category-bottom-actions">
+        <input type="text" id="newCategoryInput" placeholder="Enter new category name...">
+        <button id="saveCategoriesBtn" class="btn-save-all">💾 Save</button>
+        <button id="addCategoryBtn" class="btn-add-category">+ Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stock Detail Modal -->
+  <div class="modal" id="stockDetailModal">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2 id="stockDetailTitle">Stock Details</h2>
+        <button class="modal-close" id="closeStockDetailModal">&times;</button>
+      </div>
+      <div id="stockDetailBody" style="max-height: 60vh; overflow-y: auto;"></div>
+      <div class="form-actions" style="margin-top: 1.5rem;">
+        <button type="button" class="btn-cancel" id="closeStockDetailBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Receipts Modal -->
+  <div class="modal" id="journalRecentModal">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2>Print Queue</h2>
+        <button class="modal-close" id="closeJournalRecentModal">&times;</button>
+      </div>
+      <div id="journalRecentModalBody" style="max-height: 60vh; overflow-y: auto; padding: 1.25rem;">
+        <div class="journal-empty">No receipts in queue</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Receipt Preview Modal -->
+  <div class="modal" id="journalPreviewModal">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2>Receipt Preview</h2>
+        <button class="modal-close" id="closeJournalPreviewModal">&times;</button>
+      </div>
+      <div id="journalPreviewModalBody" style="max-height: 60vh; overflow-y: auto; padding: 1.25rem;"></div>
+    </div>
+  </div>
+
+  <!-- Password Modal for Manual Update -->
+<div class="modal" id="manualUpdatePasswordModal">
+  <div class="modal-content" style="max-width: 400px;">
+    <div class="modal-header">
+      <h2>🔒 Access Restricted</h2>
+      <button class="modal-close" id="closePasswordModal">&times;</button>
+    </div>
+    <div style="padding: 1.5rem;">
+      <p style="color: #6b7280; margin-bottom: 1rem;">
+        Manual Inventory Update requires authorization. Please enter the password to continue.
+      </p>
+      <div class="form-group">
+        <label for="manualUpdatePassword">Password</label>
+        <input type="password" id="manualUpdatePassword" placeholder="Enter password" style="width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 1rem;">
+      </div>
+      <div id="passwordError" style="color: #dc2626; font-size: 0.875rem; margin-top: 0.5rem; display: none;">
+        ❌ Incorrect password. Please try again.
+      </div>
+    </div>
+    <div class="modal-actions" style="padding: 0 1.5rem 1.5rem;">
+      <button type="button" class="btn-cancel" id="cancelPasswordBtn">Cancel</button>
+      <button type="button" class="btn-primary" id="confirmPasswordBtn">Access</button>
+    </div>
+  </div>
+</div>
+
+
+  
+  <!-- 1. Global Data (must load first) -->
+  <script src="js/data-globals.js"></script>
+  
+  <!-- 2. Firebase Helpers -->
+  <script src="js/firebase-helpers.js"></script>
+  
+  <!-- 3. Core Modules (order doesn't matter for these) -->
+  <script src="js/navigation.js"></script>
+  <script src="js/dashboard.js"></script>
+  <script src="js/inventory.js"></script>
+  <script src="js/manual-update.js"></script>
+  <script src="js/restock.js"></script>
+  <script src="js/patients.js"></script>
+  <script src="js/leave-ot.js"></script>
+  <script src="js/journals.js"></script>
+  <script src="js/sales.js"></script>
+  <script src="js/assignments.js"></script>
+  <script src="js/payroll.js"></script>
+  <script src="js/payroll-bridge.js"></script>
+  <script src="js/payroll-calculation.js"></script>
+  <script src="js/dialysis.js"></script>
+
+  
+  
+  <!-- 4. Main Initialization (must load last) -->
+  <script src="js/main.js"></script>
+
+</body>
+</html>

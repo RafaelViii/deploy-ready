@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Account Troubleshooter - Luzon Renal Care</title>
+  
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+    }
+
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+    }
+
+    .section {
+      background: #f8f9fa;
+      padding: 20px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      border-left: 4px solid #667eea;
+    }
+
+    .section h2 {
+      color: #333;
+      font-size: 18px;
+      margin-bottom: 15px;
+    }
+
+    .btn {
+      padding: 12px 24px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      margin: 5px;
+      transition: all 0.3s;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+    }
+
+    .btn:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-secondary {
+      background: #6c757d;
+    }
+
+    .result {
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 15px;
+      display: none;
+    }
+
+    .result.show {
+      display: block;
+    }
+
+    .result pre {
+      background: #f1f3f5;
+      padding: 10px;
+      border-radius: 5px;
+      overflow-x: auto;
+      font-size: 12px;
+    }
+
+    .success {
+      color: #155724;
+      background: #d4edda;
+      padding: 10px;
+      border-radius: 5px;
+      margin: 10px 0;
+    }
+
+    .error {
+      color: #721c24;
+      background: #f8d7da;
+      padding: 10px;
+      border-radius: 5px;
+      margin: 10px 0;
+    }
+
+    .warning {
+      color: #856404;
+      background: #fff3cd;
+      padding: 10px;
+      border-radius: 5px;
+      margin: 10px 0;
+    }
+
+    .info {
+      color: #004085;
+      background: #cce5ff;
+      padding: 10px;
+      border-radius: 5px;
+      margin: 10px 0;
+    }
+
+    input {
+      width: 100%;
+      padding: 10px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 14px;
+      margin: 10px 0;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    label {
+      display: block;
+      color: #333;
+      font-weight: 600;
+      margin-top: 10px;
+    }
+
+    .user-card {
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 10px 0;
+      border-left: 4px solid #667eea;
+    }
+
+    .user-card h3 {
+      color: #333;
+      font-size: 16px;
+      margin-bottom: 10px;
+    }
+
+    .user-card p {
+      color: #666;
+      font-size: 13px;
+      margin: 5px 0;
+    }
+
+    .code-block {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 10px 0;
+      overflow-x: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+    }
+
+    .step {
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 10px 0;
+      border-left: 4px solid #28a745;
+    }
+
+    .step h3 {
+      color: #333;
+      font-size: 15px;
+      margin-bottom: 10px;
+    }
+  </style>
+
+  <script>
+    // Firebase Configuration
+    const firebaseConfig = {
+      apiKey:            "AIzaSyAy3V0HpECz611eo3gpVE50KjNC_BRo608",
+      authDomain:        "yepbro-e3468.firebaseapp.com",
+      projectId:         "yepbro-e3468",
+      storageBucket:     "yepbro-e3468.firebasestorage.app",
+      messagingSenderId: "616963714633",
+      appId:             "1:616963714633:web:ef2f7fa085c6e989f2d998",
+      measurementId:     "G-GG3N0299VE"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    // Check if any users exist
+    async function checkAuthUsers() {
+      const resultDiv = document.getElementById('authUsersResult');
+      resultDiv.innerHTML = '<p>Checking Firebase Authentication...</p>';
+      resultDiv.className = 'result show';
+
+      try {
+        // We can't list auth users from client-side
+        // But we can check if our Firestore has users
+        const usersSnapshot = await db.collection('users').limit(10).get();
+        
+        if (usersSnapshot.empty) {
+          resultDiv.innerHTML = `
+            <div class="warning">
+              <strong>⚠️ No users found in Firestore</strong>
+              <p>This means no accounts have been created yet.</p>
+            </div>
+            <div class="info">
+              <strong>Next Step:</strong>
+              <p>Use the account creation tool to create your first account.</p>
+            </div>
+          `;
+        } else {
+          let html = `<div class="success"><strong>✅ Found ${usersSnapshot.size} users in Firestore</strong></div>`;
+          
+          usersSnapshot.forEach(doc => {
+            const user = doc.data();
+            html += `
+              <div class="user-card">
+                <h3>${user.name || 'N/A'}</h3>
+                <p><strong>Email:</strong> ${user.email || 'N/A'}</p>
+                <p><strong>Role:</strong> ${user.role || 'N/A'}</p>
+                <p><strong>Status:</strong> ${user.status || 'N/A'}</p>
+                <p style="color: #999; font-size: 11px;"><strong>UID:</strong> ${doc.id}</p>
+              </div>
+            `;
+          });
+          
+          resultDiv.innerHTML = html;
+        }
+      } catch (error) {
+        resultDiv.innerHTML = `
+          <div class="error">
+            <strong>❌ Error checking users:</strong>
+            <p>${error.message}</p>
+          </div>
+        `;
+      }
+    }
+
+    // Test login with provided credentials
+    async function testLogin() {
+      const email = document.getElementById('testEmail').value.trim();
+      const password = document.getElementById('testPassword').value;
+      const resultDiv = document.getElementById('loginTestResult');
+      const btn = document.getElementById('testLoginBtn');
+
+      if (!email || !password) {
+        resultDiv.innerHTML = '<div class="error">Please enter both email and password</div>';
+        resultDiv.className = 'result show';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Testing...';
+      resultDiv.innerHTML = '<p>Testing login credentials...</p>';
+      resultDiv.className = 'result show';
+
+      try {
+        // Try to sign in
+        const userCredential = await auth.signInWithEmailAndPassword(email, password);
+        const user = userCredential.user;
+
+        // Check Firestore profile
+        const userDoc = await db.collection('users').doc(user.uid).get();
+
+        if (!userDoc.exists) {
+          await auth.signOut();
+          resultDiv.innerHTML = `
+            <div class="warning">
+              <strong>⚠️ Authentication Successful BUT Profile Missing</strong>
+              <p>User exists in Firebase Auth but NOT in Firestore.</p>
+            </div>
+            <div class="step">
+              <h3>Solution:</h3>
+              <p>Create Firestore profile for this user:</p>
+              <ol>
+                <li>Go to Firebase Console → Firestore</li>
+                <li>Collection: <code>users</code></li>
+                <li>Document ID: <code>${user.uid}</code></li>
+                <li>Add fields: name, email, role, status</li>
+              </ol>
+            </div>
+          `;
+        } else {
+          const userData = userDoc.data();
+          await auth.signOut();
+
+          resultDiv.innerHTML = `
+            <div class="success">
+              <strong>✅ Login Successful!</strong>
+              <p>Credentials are valid and profile exists.</p>
+            </div>
+            <div class="user-card">
+              <h3>User Details</h3>
+              <p><strong>Name:</strong> ${userData.name || 'N/A'}</p>
+              <p><strong>Email:</strong> ${userData.email || user.email}</p>
+              <p><strong>Role:</strong> ${userData.role || 'N/A'}</p>
+              <p><strong>Status:</strong> ${userData.status || 'N/A'}</p>
+              <p><strong>UID:</strong> ${user.uid}</p>
+            </div>
+            <div class="info">
+              <strong>✅ You can now login to the system with these credentials!</strong>
+            </div>
+          `;
+        }
+      } catch (error) {
+        let errorMsg = '';
+        
+        if (error.code === 'auth/user-not-found') {
+          errorMsg = `
+            <div class="error">
+              <strong>❌ User Not Found</strong>
+              <p>No user exists with email: <code>${email}</code></p>
+            </div>
+            <div class="step">
+              <h3>Solution:</h3>
+              <p>Create an account using the account creation tool.</p>
+            </div>
+          `;
+        } else if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+          errorMsg = `
+            <div class="error">
+              <strong>❌ Invalid Password</strong>
+              <p>The password is incorrect for email: <code>${email}</code></p>
+            </div>
+            <div class="step">
+              <h3>Solution:</h3>
+              <p>1. Double-check your password (case-sensitive)</p>
+              <p>2. Try password reset, OR</p>
+              <p>3. Create a new account with a different email</p>
+            </div>
+          `;
+        } else if (error.code === 'auth/invalid-email') {
+          errorMsg = `
+            <div class="error">
+              <strong>❌ Invalid Email Format</strong>
+              <p>The email address is not valid: <code>${email}</code></p>
+            </div>
+          `;
+        } else {
+          errorMsg = `
+            <div class="error">
+              <strong>❌ Login Failed</strong>
+              <p><strong>Error Code:</strong> ${error.code}</p>
+              <p><strong>Message:</strong> ${error.message}</p>
+            </div>
+          `;
+        }
+
+        resultDiv.innerHTML = errorMsg;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Test Login';
+      }
+    }
+
+    // Create a test admin account
+    async function createTestAdmin() {
+      const resultDiv = document.getElementById('createAdminResult');
+      const btn = document.getElementById('createAdminBtn');
+
+      const email = 'admin@luzonrenalcare.com';
+      const password = 'Admin@2026';
+      const name = 'Admin User';
+      const role = 'admin';
+
+      btn.disabled = true;
+      btn.textContent = 'Creating...';
+      resultDiv.innerHTML = '<p>Creating admin account...</p>';
+      resultDiv.className = 'result show';
+
+      try {
+        // Create auth user
+        const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+        const userId = userCredential.user.uid;
+
+        // Create Firestore profile
+        await db.collection('users').doc(userId).set({
+          name: name,
+          email: email,
+          role: role,
+          department: 'Administration',
+          status: 'active',
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        await auth.signOut();
+
+        resultDiv.innerHTML = `
+          <div class="success">
+            <strong>✅ Admin Account Created Successfully!</strong>
+          </div>
+          <div class="user-card">
+            <h3>Login Credentials</h3>
+            <p><strong>Email:</strong> ${email}</p>
+            <p><strong>Password:</strong> ${password}</p>
+            <p><strong>Role:</strong> ${role}</p>
+            <p><strong>UID:</strong> ${userId}</p>
+          </div>
+          <div class="info">
+            <strong>⚠️ SAVE THESE CREDENTIALS!</strong>
+            <p>You can now login to the system with these credentials.</p>
+          </div>
+        `;
+      } catch (error) {
+        if (error.code === 'auth/email-already-in-use') {
+          resultDiv.innerHTML = `
+            <div class="warning">
+              <strong>⚠️ Account Already Exists</strong>
+              <p>An account with <code>${email}</code> already exists.</p>
+            </div>
+            <div class="info">
+              <strong>Login Credentials:</strong>
+              <p><strong>Email:</strong> ${email}</p>
+              <p><strong>Password:</strong> ${password}</p>
+              <p>Try logging in with these credentials.</p>
+            </div>
+          `;
+        } else {
+          resultDiv.innerHTML = `
+            <div class="error">
+              <strong>❌ Error Creating Account</strong>
+              <p>${error.message}</p>
+            </div>
+          `;
+        }
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Create Test Admin Account';
+      }
+    }
+
+    // Send password reset email
+    async function sendPasswordReset() {
+      const email = document.getElementById('resetEmail').value.trim();
+      const resultDiv = document.getElementById('resetResult');
+      const btn = document.getElementById('resetBtn');
+
+      if (!email) {
+        resultDiv.innerHTML = '<div class="error">Please enter an email address</div>';
+        resultDiv.className = 'result show';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Sending...';
+      resultDiv.innerHTML = '<p>Sending password reset email...</p>';
+      resultDiv.className = 'result show';
+
+      try {
+        await auth.sendPasswordResetEmail(email);
+        resultDiv.innerHTML = `
+          <div class="success">
+            <strong>✅ Password Reset Email Sent!</strong>
+            <p>Check your inbox at: <code>${email}</code></p>
+            <p>Click the link in the email to reset your password.</p>
+          </div>
+        `;
+      } catch (error) {
+        if (error.code === 'auth/user-not-found') {
+          resultDiv.innerHTML = `
+            <div class="error">
+              <strong>❌ User Not Found</strong>
+              <p>No account exists with email: <code>${email}</code></p>
+            </div>
+          `;
+        } else {
+          resultDiv.innerHTML = `
+            <div class="error">
+              <strong>❌ Error</strong>
+              <p>${error.message}</p>
+            </div>
+          `;
+        }
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Send Reset Email';
+      }
+    }
+  </script>
+</head>
+<body>
+
+  <div class="container">
+    <h1>🔧 Account Troubleshooter</h1>
+    <p class="subtitle">Diagnose and fix login issues</p>
+
+    <!-- Section 1: Check Existing Users -->
+    <div class="section">
+      <h2>1️⃣ Check Existing Users</h2>
+      <p>See if any user accounts exist in your system.</p>
+      <button class="btn" onclick="checkAuthUsers()">Check Users</button>
+      <div id="authUsersResult" class="result"></div>
+    </div>
+
+    <!-- Section 2: Test Login -->
+    <div class="section">
+      <h2>2️⃣ Test Login Credentials</h2>
+      <p>Test if your email and password work.</p>
+      
+      <label for="testEmail">Email Address</label>
+      <input type="email" id="testEmail" placeholder="user@example.com">
+      
+      <label for="testPassword">Password</label>
+      <input type="password" id="testPassword" placeholder="Enter password">
+      
+      <button class="btn" id="testLoginBtn" onclick="testLogin()">Test Login</button>
+      <div id="loginTestResult" class="result"></div>
+    </div>
+
+    <!-- Section 3: Create Test Admin -->
+    <div class="section">
+      <h2>3️⃣ Create Test Admin Account</h2>
+      <p>Create a ready-to-use admin account instantly.</p>
+      
+      <div class="info">
+        <strong>Credentials that will be created:</strong>
+        <p><strong>Email:</strong> admin@luzonrenalcare.com</p>
+        <p><strong>Password:</strong> Admin@2026</p>
+        <p><strong>Role:</strong> Admin (Full Access)</p>
+      </div>
+      
+      <button class="btn" id="createAdminBtn" onclick="createTestAdmin()">Create Test Admin Account</button>
+      <div id="createAdminResult" class="result"></div>
+    </div>
+
+    <!-- Section 4: Password Reset -->
+    <div class="section">
+      <h2>4️⃣ Reset Password</h2>
+      <p>Send a password reset email to an existing account.</p>
+      
+      <label for="resetEmail">Email Address</label>
+      <input type="email" id="resetEmail" placeholder="user@example.com">
+      
+      <button class="btn" id="resetBtn" onclick="sendPasswordReset()">Send Reset Email</button>
+      <div id="resetResult" class="result"></div>
+    </div>
+
+  </div>
+
+</body>
+</html>

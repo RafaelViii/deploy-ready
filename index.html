@@ -1,0 +1,1113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Accounting Dashboard</title>
+  <link rel="stylesheet" href="styles.css"> 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+ 
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <h2>
+          <div class="logo-container">
+            <img src="logo-no-bg.png" alt="Logo" class="sidebar-logo">
+            <span>LUZON RENAL CARE</span>
+          </div>
+          <span id="navToggle">☰</span>
+        </h2>
+      </div>
+      <nav>
+        <a href="#" class="active" data-page="dashboard">Dashboard</a>
+        <a href="#" data-page="inventory">Inventory</a>
+        <a href="#" data-page="trial">Patient List</a>
+        <a href="#" data-page="journals">Charge Slip</a>
+        <a href="#" data-page="accounts">Sales</a>
+        <a href="#" data-page="financials">Request</a>
+        <a href="#" data-page="adjustments">Payroll</a>
+        <a href="#" data-page="payslip">Print</a>
+        <a href="#" data-page="reports">Assignment</a>
+        <a href="#" data-page="settings">Settings</a>
+      </nav>
+      
+      <!-- User Profile Section -->
+      <div class="user-profile">
+        <div class="user-profile-header" id="userProfileToggle">
+          <div class="user-avatar">
+            <span id="userInitials">JD</span>
+          </div>
+          <div class="user-info">
+            <div class="user-name" id="userName">John Doe</div>
+            <div class="user-role" id="userRole">Owner</div>
+          </div>
+          <div class="dropdown-icon">▼</div>
+        </div>
+        
+        <div class="user-dropdown" id="userDropdown">
+          <div class="dropdown-section">
+            <div class="dropdown-label">Switch Role (Demo)</div>
+            <button class="dropdown-item role-switch" data-role="owner">
+              <span class="role-icon">👑</span>
+              <div class="role-info">
+                <div class="role-name">Owner</div>
+                <div class="role-desc">Full access, monitor changes</div>
+              </div>
+            </button>
+            <button class="dropdown-item role-switch" data-role="admin">
+              <span class="role-icon">⚙️</span>
+              <div class="role-info">
+                <div class="role-name">Admin</div>
+                <div class="role-desc">View, write, delete</div>
+              </div>
+            </button>
+            <button class="dropdown-item role-switch" data-role="nurse">
+              <span class="role-icon">👨‍⚕️</span>
+              <div class="role-info">
+                <div class="role-name">Nurse</div>
+                <div class="role-desc">Limited access</div>
+              </div>
+            </button>
+          </div>
+          <div class="dropdown-divider"></div>
+          <button class="dropdown-item logout-btn">
+            <span class="logout-icon">🚪</span>
+            <span>Logout</span>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <!-- === DASHBOARD === -->
+      <div class="page active" id="dashboard">
+        <header>
+          <div class="header-top">
+            <div>
+              <h1>Dashboard</h1>
+              <p>Accounting system overview</p>
+            </div>
+            <div class="dashboard-date" id="dashboardDate">January 23, 2026</div>
+          </div>
+        </header>
+
+        <!-- Inventory Overview Section -->
+        <div class="inventory-overview-section">
+          <div class="section-header">
+            <h3 class="section-title">Inventory Status</h3>
+            <div class="period-selector">
+              <button class="period-btn active" data-period="today">Today</button>
+              <button class="period-btn" data-period="month">This Month</button>
+              <button class="period-btn" data-period="year">This Year</button>
+            </div>
+          </div>
+          
+          <div class="inventory-overview">
+            <div class="overview-card available-card" data-status="Available">
+              <div class="overview-content">
+                <div class="overview-label">Available Stock</div>
+                <div class="overview-value" id="dashAvailableCount">0</div>
+              </div>
+            </div>
+            
+            <div class="overview-card low-stock-card" data-status="Low Stock">
+              <div class="overview-content">
+                <div class="overview-label">Low Stock</div>
+                <div class="overview-value" id="dashLowStockCount">0</div>
+              </div>
+            </div>
+            
+            <div class="overview-card out-stock-card" data-status="Out of Stock">
+              <div class="overview-content">
+                <div class="overview-label">Out of Stock</div>
+                <div class="overview-value" id="dashOutStockCount">0</div>
+              </div>
+            </div>
+            
+            <div class="overview-card expiring-card" data-status="Expiring Soon">
+              <div class="overview-content">
+                <div class="overview-label">Expiring Soon</div>
+                <div class="overview-value" id="dashExpiringCount">0</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cards">
+          <div class="card"><h3>Total Assets</h3><div class="value" id="totalAssets">₱500,000</div></div>
+          <div class="card"><h3>Liabilities</h3><div class="value" id="totalLiabilities">₱200,000</div></div>
+          <div class="card"><h3>Revenue</h3><div class="value" id="totalRevenue">₱120,000</div></div>
+          <div class="card"><h3>Expenses</h3><div class="value" id="totalExpenses">₱75,500</div></div>
+          <div class="card"><h3>Net Profit</h3><div class="value" id="netProfit">₱44,500</div></div>
+        </div>
+
+        <div class="charts">
+          <div class="chart-card"><h3 id="incomeExpensesTitle">Income vs Expenses</h3><canvas id="revExp"></canvas></div>
+          <div class="chart-card"><h3 id="cashFlowTitle">Cash Flow Trends</h3><canvas id="cashFlow"></canvas></div>
+          <div class="chart-card"><h3 id="profitMarginTitle">Profit Margins</h3><canvas id="profitMargin"></canvas></div>
+        </div>
+
+        <div class="transactions">
+          <h3>Recent Transactions</h3>
+          <table>
+            <thead>
+              <tr><th>Date</th><th>Description</th><th>Amount</th><th>Status</th></tr>
+            </thead>
+            <tbody id="transactionsBody">
+              <tr><td class="date" data-label="Date">26-01-10</td><td data-label="Description">Invoice #1023</td><td data-label="Amount">₱5,000</td><td data-label="Status">Paid</td></tr>
+              <tr><td class="date" data-label="Date">26-01-11</td><td data-label="Description">Invoice #1024</td><td data-label="Amount">₱7,500</td><td data-label="Status">Unpaid</td></tr>
+              <tr><td class="date" data-label="Date">26-01-12</td><td data-label="Description">Invoice #1025</td><td data-label="Amount">₱3,200</td><td data-label="Status">Paid</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="alerts">
+          <h3>Alerts</h3>
+          <table>
+            <thead>
+              <tr><th>Invoice</th><th>Due Date</th><th>Status</th></tr>
+            </thead>
+            <tbody id="alertsBody">
+              <tr><td data-label="Invoice">#1024</td><td class="date" data-label="Due Date">26-01-15</td><td data-label="Status">Overdue</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- === INVENTORY PAGE === -->
+      <div class="page" id="inventory">
+        <!-- Header with Title and Current Date -->
+        <div class="inventory-new-header">
+          <h2>Inventory<br>Management</h2>
+          <div class="current-date-badge" id="inventoryCurrentDate">January 24, 2026</div>
+        </div>
+
+        <!-- Four Box Grid (2x2) -->
+        <div class="inventory-status-grid">
+          <div class="status-box available active" data-status="all">
+            <div class="status-label">All</div>
+            <div class="status-count" id="allCount">0</div>
+          </div>
+          <div class="status-box low" data-status="low">
+            <div class="status-label">Low Stock</div>
+            <div class="status-count" id="lowCount">0</div>
+          </div>
+          <div class="status-box out" data-status="out">
+            <div class="status-label">Out of Stock</div>
+            <div class="status-count" id="outCount">0</div>
+          </div>
+          <div class="status-box add" id="addNewProductBox">
+            <div class="status-label">Add Product</div>
+            <div class="add-icon">+</div>
+          </div>
+        </div>
+
+        <!-- Search Bar -->
+        <div class="inventory-search-bar">
+          <input type="text" id="inventorySearchInput" placeholder="Search products...">
+        </div>
+
+        <!-- Navigation: Date Picker and Prev/Next Buttons -->
+        <div class="inventory-navigation">
+          <input type="date" id="visibleDatePicker" class="visible-date-picker">
+          <div class="nav-arrows-group">
+            <button class="nav-arrow-btn" id="prevDayBtn">&lt;</button>
+            <button class="nav-arrow-btn" id="nextDayBtn">&gt;</button>
+          </div>
+        </div>
+        
+        <!-- Hidden date picker for popup -->
+        <input type="date" id="datePickerInput" class="hidden-date-picker">
+
+        <!-- Products Table -->
+        <div class="inventory-products-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Product</th>
+                <th>Current Stock</th>
+                <th>Expiry Date</th>
+                <th>Sales</th>
+              </tr>
+            </thead>
+            <tbody id="inventoryProductsBody">
+              <!-- Products will be inserted here by JavaScript -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Restock Button -->
+        <div class="restock-button-container">
+          <button id="goToRestockBtn" class="btn-restock">📦 Restock Checklist</button>
+          <button id="goToManualUpdateBtn" class="btn-manual-update">✏️ Manual Inventory Update</button>
+        </div>
+
+        <!-- Hidden date picker for popup -->
+        <input type="date" id="datePickerInput" class="hidden-date-picker">
+      </div>
+
+      <!-- === RESTOCK CHECKLIST PAGE === -->
+      <div class="restock-page" id="restockPage" style="display: none;">
+        <div class="restock-header">
+          <h2>Restock Checklist</h2>
+          <button id="backFromRestockBtn" class="btn-back">← Back to Inventory</button>
+        </div>
+
+        <!-- Search and Category Filter -->
+        <div class="restock-search-filter">
+          <input type="text" id="restockSearchInput" class="restock-search-input" placeholder="🔍 Search products...">
+          <select id="restockCategoryFilter" class="restock-category-filter">
+            <option value="all">All Categories</option>
+            <!-- Categories will be populated dynamically -->
+          </select>
+        </div>
+
+        <!-- Filter Tabs -->
+        <div class="restock-filters">
+          <button class="restock-filter-btn active" data-filter="all">All</button>
+          <button class="restock-filter-btn" data-filter="low">Low Stock</button>
+          <button class="restock-filter-btn" data-filter="out">Out of Stock</button>
+        </div>
+
+        <!-- Restock Items List -->
+        <div id="restockItemsList" class="restock-items-list">
+          <!-- Cards will be inserted here -->
+        </div>
+
+        <!-- Bottom Actions -->
+        <div class="restock-actions">
+          <button id="deleteSelectedBtn" class="btn-delete-selected">✕</button>
+          <button id="updateStocksBtn" class="btn-update-stocks">
+            ✓ Update Stocks <span id="updateCounter">(0)</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- === MANUAL INVENTORY UPDATE PAGE === -->
+      <div class="manual-update-page" id="manualUpdatePage" style="display: none;">
+        <div class="manual-update-header">
+        <h2>Manual Inventory Update</h2>
+        <button id="backFromManualUpdateBtn" class="btn-back">← Back to Inventory</button>
+      </div>
+
+      <!-- Search and Category Filter -->
+      <div class="restock-search-filter">
+        <input type="text" id="manualUpdateSearchInput" class="restock-search-input" placeholder="🔍 Search products...">
+        <select id="manualUpdateCategoryFilter" class="restock-category-filter">
+          <option value="all">All Categories</option>
+          <!-- Categories will be populated dynamically -->
+        </select>
+      </div>
+
+      <!-- Date Display -->
+      <div class="manual-update-date-display">
+          <span class="date-label">Editing sales for:</span>
+          <span class="date-value" id="manualUpdateDateDisplay">January 26, 2026</span>
+        </div>
+
+        <!-- Products List -->
+        <div class="manual-update-list" id="manualUpdateList">
+          <!-- Products will be inserted here -->
+        </div>
+
+        <!-- Save Button -->
+        <div class="manual-update-save-container">
+          <button id="saveManualUpdatesBtn" class="btn-save-manual-updates">Save All Changes</button>
+        </div>
+      </div>
+
+      <!-- === PATIENT LIST / LABORATORY LOGBOOK === -->
+      <div class="page" id="trial">
+        <div class="patient-list-header">
+          <h2>Laboratory Logbook</h2>
+          <button class="btn-manage-lab-types" id="manageLabTypesBtn">Manage Lab Types</button>
+        </div>
+
+        <!-- Add Patient Form -->
+        <div class="add-patient-form">
+          <h3>Record New Patient</h3>
+          <div class="patient-form-grid">
+            <div class="form-group">
+              <label for="patientNameInput">Patient Name</label>
+              <input type="text" id="patientNameInput" placeholder="Enter patient name" required>
+            </div>
+            
+            <div class="form-group">
+              <label for="labTypeSelect">Laboratory Type</label>
+              <select id="labTypeSelect" required>
+                <option value="">Select Lab Type</option>
+                <!-- Options will be populated from preset -->
+              </select>
+            </div>
+            
+            <div class="form-group align-end">
+              <button class="btn-add-patient" id="addPatientBtn">+ Add Patient</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Patient Records Table -->
+        <div class="patient-records-container">
+          <h3>Patient Records</h3>
+          <div class="table-wrapper">
+            <table class="patient-records-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Date</th>
+                  <th>Patient Name</th>
+                  <th>Lab Type</th>
+                  <th>Nurse on Duty</th>
+                  <th>Assigned</th>
+                </tr>
+              </thead>
+              <tbody id="patientRecordsBody">
+                <!-- Records will be inserted here -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Lab Types Management Modal -->
+      <div class="modal" id="labTypesModal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2>Manage Laboratory Types</h2>
+            <button class="modal-close" id="closeLabTypesModal">&times;</button>
+          </div>
+          
+          <div class="lab-types-list" id="labTypesList">
+            <!-- Lab types will be inserted here -->
+          </div>
+          
+          <div class="add-lab-type-form">
+            <input type="text" id="newLabTypeInput" placeholder="Enter new lab type...">
+            <button id="addLabTypeBtn">+ Add Lab Type</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- === SALES PAGE === -->
+      <div class="page" id="accounts">
+        <div class="sales-page-header">
+          <h2>Sales Records</h2>
+          <div class="sales-period-selector">
+            <button class="sales-period-btn active" data-period="today">Today</button>
+            <button class="sales-period-btn" data-period="month">This Month</button>
+            <button class="sales-period-btn" data-period="year">This Year</button>
+          </div>
+        </div>
+
+        <!-- Summary Cards -->
+        <div class="sales-summary-cards">
+          <div class="sales-summary-card revenue">
+            <div class="sales-summary-label">Total Revenue</div>
+            <div class="sales-summary-value" id="salesTotalRevenue">₱0</div>
+          </div>
+          
+          <div class="sales-summary-card transactions">
+            <div class="sales-summary-label">Transactions</div>
+            <div class="sales-summary-value" id="salesTotalTransactions">0</div>
+          </div>
+          
+          <div class="sales-summary-card items">
+            <div class="sales-summary-label">Items Sold</div>
+            <div class="sales-summary-value" id="salesTotalItems">0</div>
+          </div>
+          
+          <div class="sales-summary-card average">
+            <div class="sales-summary-label">Average Sale</div>
+            <div class="sales-summary-value" id="salesAverageSale">₱0</div>
+          </div>
+        </div>
+
+        <!-- Search and Export -->
+        <div class="sales-search-export">
+          <input type="text" id="salesSearchInput" class="sales-search-input" placeholder="🔍 Search by patient name, nurse, or items...">
+          <button id="exportSalesBtn" class="btn-export-sales">📊 Export to Excel</button>
+        </div>
+
+        <!-- Sales Table -->
+        <div class="sales-table-container">
+          <table class="sales-table">
+            <thead>
+              <tr>
+                <th>Date & Time</th>
+                <th>Patient Name</th>
+                <th>Nurse</th>
+                <th>Items Breakdown</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody id="salesTableBody">
+              <!-- Sales records will be inserted here -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Category Breakdown -->
+        <div class="category-breakdown">
+          <h3>Sales by Category</h3>
+          <div class="category-breakdown-grid" id="categoryBreakdownGrid">
+            <!-- Category breakdown will be inserted here -->
+          </div>
+        </div>
+      </div>
+
+      <!-- === JOURNALS PAGE === -->
+      <div class="page" id="journals">
+        <div class="journal-responsive-layout">
+          <!-- Top: Header Info -->
+          <div class="journal-header-compact">
+            <div class="journal-nurse-info">
+              <span id="journalNurseName">Mark Cruz</span>
+              <span id="journalCurrentTime">01/23/26 - 14:30</span>
+            </div>
+            <input type="text" id="journalPatientName" class="journal-patient-input-inline" placeholder="Patient Name">
+          </div>
+
+          <!-- Middle: Current Items (collapsible/compact) -->
+          <div class="journal-current-items-compact" id="journalItemsList">
+            <div class="journal-empty-inline">No items • Tap category to start</div>
+          </div>
+
+          <!-- Scrollable: Category/Product Selection -->
+          <div class="journal-selection-scrollable">
+            <div class="journal-selection-title-small" id="journalSelectionTitle">Select Category</div>
+            
+            <!-- Category Grid -->
+            <div class="journal-grid-scrollable" id="journalCategoryGrid">
+              <button class="journal-grid-btn" data-category="Medicine">
+                <span class="journal-grid-icon">💊</span>
+                <span>Medicine</span>
+              </button>
+              <button class="journal-grid-btn" data-category="PPE">
+                <span class="journal-grid-icon">😷</span>
+                <span>PPE</span>
+              </button>
+              <button class="journal-grid-btn" data-category="Supplies">
+                <span class="journal-grid-icon">🩹</span>
+                <span>Supplies</span>
+              </button>
+              <button class="journal-grid-btn" data-category="Equipment">
+                <span class="journal-grid-icon">🔬</span>
+                <span>Equipment</span>
+              </button>
+              <button class="journal-grid-btn" data-category="Hygiene">
+                <span class="journal-grid-icon">🧼</span>
+                <span>Hygiene</span>
+              </button>
+              <button class="journal-grid-btn" data-category="Other">
+                <span class="journal-grid-icon">📦</span>
+                <span>Other</span>
+              </button>
+            </div>
+
+            <!-- Product Grid (Hidden by default) -->
+            <div class="journal-grid-scrollable journal-hidden" id="journalProductGrid">
+              <!-- Products will be dynamically loaded here -->
+            </div>
+          </div>
+
+          <!-- Fixed Bottom: Controls -->
+          <div class="journal-fixed-bottom">
+            <div class="journal-qty-row">
+              <button class="journal-qty-btn-small" id="journalDecreaseQty">−</button>
+              <div class="journal-qty-num" id="journalQtyDisplay">1</div>
+              <button class="journal-qty-btn-small" id="journalIncreaseQty">+</button>
+            </div>
+            <div class="journal-action-row">
+              <button class="journal-btn-small journal-recent-btn" id="journalRecentBtn">Recent</button>
+              <button class="journal-btn-small journal-ok-btn" id="journalOkBtn" disabled>Save</button>
+              <button class="journal-btn-small journal-add-btn" id="journalAddItemBtn" disabled>Add</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+            <!-- === LEAVE MANAGEMENT SYSTEM === -->
+      <div class="page" id="financials">
+        <!-- Leave Dashboard View (Default for Admin/Owner) -->
+        <div class="leave-dashboard" id="leaveDashboard">
+          <div class="leave-header">
+            <h2>File Request</h2>
+            <div class="leave-header-buttons">
+              <button class="btn-apply-ot" id="applyOTBtn">+ Apply OT</button>
+              <button class="btn-apply-leave" id="applyLeaveBtn">+ Apply Leave</button>
+            </div>
+          </div>
+
+          <!-- Leave Statistics Cards -->
+          <div class="leave-stats">
+            <div class="leave-stat-card pending-card">
+              <div class="stat-icon">⏳</div>
+              <div class="stat-content">
+                <div class="stat-label">Pending Applications</div>
+                <div class="stat-value" id="pendingCount">0</div>
+              </div>
+            </div>
+
+            <div class="leave-stat-card active-card">
+              <div class="stat-icon">🏖️</div>
+              <div class="stat-content">
+                <div class="stat-label">Currently on Leave</div>
+                <div class="stat-value" id="activeLeaveCount">0</div>
+              </div>
+            </div>
+
+            <div class="leave-stat-card approved-card">
+              <div class="stat-icon">✅</div>
+              <div class="stat-content">
+                <div class="stat-label">Approved This Month</div>
+                <div class="stat-value" id="approvedCount">0</div>
+              </div>
+            </div>
+
+            <div class="leave-stat-card rejected-card">
+              <div class="stat-icon">❌</div>
+              <div class="stat-content">
+                <div class="stat-label">Rejected This Month</div>
+                <div class="stat-value" id="rejectedCount">0</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Filter Tabs -->
+          <div class="leave-tabs">
+            <button class="leave-tab active" data-filter="pending">Pending</button>
+            <button class="leave-tab" data-filter="active">Currently on Leave</button>
+            <button class="leave-tab" data-filter="approved">Approved</button>
+            <button class="leave-tab" data-filter="approved-ot">Approved OT</button>
+            <button class="leave-tab" data-filter="rejected">Rejected</button>
+            <button class="leave-tab" data-filter="all">All Requests</button>
+          </div>
+
+          <!-- Leave Requests List -->
+          <div class="leave-requests-container">
+            <div id="leaveRequestsList" class="leave-requests-list">
+              <!-- Leave requests will be inserted here -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Apply Leave Modal -->
+        <div class="modal" id="applyLeaveModal">
+          <div class="modal-content leave-modal-content">
+            <div class="modal-header">
+              <h2>Apply for Leave</h2>
+              <button class="modal-close" id="closeApplyLeaveModal">&times;</button>
+            </div>
+
+            <form id="applyLeaveForm">
+              <div class="form-group">
+                <label for="leaveType">Leave Type *</label>
+                <select id="leaveType" required>
+                  <option value="">Select Leave Type</option>
+                  <option value="Vacation Leave">Vacation Leave</option>
+                  <option value="Sick Leave">Sick Leave</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="leaveStartDate">Start Date *</label>
+                <input type="date" id="leaveStartDate" required>
+              </div>
+
+              <div class="form-group">
+                <label for="leaveEndDate">End Date *</label>
+                <input type="date" id="leaveEndDate" required>
+              </div>
+
+              <div class="form-group">
+                <label for="leaveDays">Number of Days</label>
+                <input type="number" id="leaveDays" readonly>
+              </div>
+
+              <div class="form-group">
+                <label for="leaveReason">Reason *</label>
+                <textarea id="leaveReason" rows="4" placeholder="Please provide reason for leave..." required></textarea>
+              </div>
+
+              <div class="leave-balance-info" id="leaveBalanceInfo">
+                <!-- Balance info will be shown here -->
+              </div>
+
+              <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="cancelApplyLeave">Cancel</button>
+                <button type="submit" class="btn-primary">Submit Application</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- Apply OT Modal -->
+        <div class="modal" id="applyOTModal">
+          <div class="modal-content leave-modal-content">
+            <div class="modal-header">
+              <h2>Apply for Overtime</h2>
+              <button class="modal-close" id="closeApplyOTModal">&times;</button>
+            </div>
+
+            <form id="applyOTForm">
+              <div class="form-group">
+                <label for="otDate">Date *</label>
+                <input type="date" id="otDate" required>
+              </div>
+
+              <div class="form-group">
+                <label for="otTimeIn">Time In *</label>
+                <input type="time" id="otTimeIn" required>
+              </div>
+
+              <div class="form-group">
+                <label for="otTimeOut">Time Out *</label>
+                <input type="time" id="otTimeOut" required>
+              </div>
+
+              <div class="form-group">
+                <label>Total OT Hours</label>
+                <div class="ot-hours-display" id="otHoursDisplay">
+                  <span class="hours-value">0.0</span> hours
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="otReason">Reason for Overtime *</label>
+                <textarea id="otReason" rows="4" placeholder="Please provide reason for overtime work..." required></textarea>
+              </div>
+
+              <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="cancelApplyOT">Cancel</button>
+                <button type="submit" class="btn-primary">Submit Application</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- View Leave Details Modal -->
+        <div class="modal" id="viewLeaveModal">
+          <div class="modal-content leave-modal-content">
+            <div class="modal-header">
+              <h2>Leave Request Details</h2>
+              <button class="modal-close" id="closeViewLeaveModal">&times;</button>
+            </div>
+
+            <div id="leaveDetailsContent">
+              <!-- Details will be inserted here -->
+            </div>
+
+            <div class="modal-actions" id="leaveActionButtons">
+              <!-- Action buttons will be inserted here based on status and role -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- === PAYROLL PAGE === -->
+      <div class="page" id="adjustments">
+        <!-- Mobile Not Supported Message -->
+        <div class="mobile-not-supported">
+          <div class="mobile-not-supported-icon">💻</div>
+          <div class="mobile-not-supported-title">Desktop Only</div>
+          <div class="mobile-not-supported-message">
+            The Payroll Management System is optimized for desktop use only. 
+            Please access this page from a desktop or laptop computer for the best experience.
+            <br><br>
+            Mobile support is not available for this feature.
+          </div>
+        </div>
+
+        <div class="payroll-container">
+          <!-- Payroll Header -->
+          <div class="payroll-header">
+            <div class="payroll-title-row">
+              <h1 class="payroll-title">Payroll Management System</h1>
+              <div class="payroll-date" id="payrollCurrentDate">January 29, 2026</div>
+            </div>
+
+            <div class="payroll-controls">
+              <div class="control-group">
+                <label class="control-label">Payroll Period</label>
+                <select class="control-select" id="payrollPeriodSelect" onchange="updatePayrollPeriod()">
+                  <option value="1st">1st (15th)</option>
+                  <option value="2nd">2nd (30th)</option>
+                </select>
+              </div>
+
+              <div class="control-group">
+                <label class="control-label">Month</label>
+                <select class="control-select" id="payrollMonthSelect">
+                  <option value="january" selected>January</option>
+                  <option value="february">February</option>
+                  <option value="march">March</option>
+                  <option value="april">April</option>
+                  <option value="may">May</option>
+                  <option value="june">June</option>
+                  <option value="july">July</option>
+                  <option value="august">August</option>
+                  <option value="september">September</option>
+                  <option value="october">October</option>
+                  <option value="november">November</option>
+                  <option value="december">December</option>
+                </select>
+              </div>
+
+              <div class="control-group">
+                <label class="control-label">Year</label>
+                <select class="control-select" id="payrollYearSelect">
+                  <option value="2026" selected>2026</option>
+                  <option value="2025">2025</option>
+                  <option value="2024">2024</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="payroll-action-buttons">
+              <button class="payroll-btn payroll-btn-save" id="payrollSaveBtn" onclick="savePayrollData()">Save</button>
+              <button class="payroll-btn payroll-btn-manage" onclick="openManageSettings()">Manage</button>
+              <button class="payroll-btn payroll-btn-export" onclick="exportPayrollData()">Export</button>
+            </div>
+          </div>
+
+          <!-- Tabs Navigation -->
+          <div class="payroll-tabs-container">
+            <div class="payroll-tabs">
+              <button class="payroll-tab active" onclick="switchPayrollTab('attendance')">Attendance</button>
+              <button class="payroll-tab" onclick="switchPayrollTab('overtime')">Over Time</button>
+              <button class="payroll-tab" onclick="switchPayrollTab('payroll')">Payroll</button>
+              <button class="payroll-tab" onclick="switchPayrollTab('history')">History</button>
+            </div>
+            
+            <div class="payroll-sort-container">
+              <select class="payroll-sort-select" id="payrollSortSelect" onchange="sortPayrollEmployees()">
+                <option value="name">Sort By: Name</option>
+                <option value="department">Sort By: Department</option>
+                <option value="id">Sort By: ID</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Attendance Tab -->
+          <div id="payrollAttendanceTab" class="payroll-tab-content active">
+            <div id="payrollAttendanceContent">
+              <div class="payroll-import-zone" id="payrollImportZone" 
+                   onclick="document.getElementById('attendanceFileInput').click()"
+                   ondragover="handleDragOver(event)"
+                   ondragenter="handleDragEnter(event)"
+                   ondragleave="handleDragLeave(event)"
+                   ondrop="handleFileDrop(event)">
+                <input type="file" id="attendanceFileInput" accept=".xlsx,.xls,.csv" style="display: none;" onchange="handleAttendanceImport(event)">
+                <div class="payroll-import-icon">📄</div>
+                <div class="payroll-import-title">Import Attendance</div>
+                <div class="payroll-import-subtitle">Click to browse or drag and drop your file here...</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Over Time Tab -->
+          <div id="payrollOvertimeTab" class="payroll-tab-content">
+            <div id="payrollOvertimeContent" class="ot-cards-grid">
+              <!-- OT content will be populated here -->
+            </div>
+          </div>
+
+          <!-- Payroll Tab -->
+          <div id="payrollPayrollTab" class="payroll-tab-content">
+            <div id="payrollPayrollContent">
+              <div class="payroll-import-zone" onclick="document.getElementById('payrollFileInput').click()"
+                   ondragover="handleDragOver(event)"
+                   ondragenter="handleDragEnter(event)"
+                   ondragleave="handleDragLeave(event)"
+                   ondrop="handlePayrollFileDrop(event)">
+                <input type="file" id="payrollFileInput" accept=".xlsx,.xls" style="display: none;" onchange="handlePayrollImport(event)">
+                <div class="payroll-import-icon">💰</div>
+                <div class="payroll-import-title">Payroll Calculation</div>
+                <div class="payroll-import-subtitle">Upload exported attendance file with OT data to calculate payroll</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- History Tab -->
+          <div id="payrollHistoryTab" class="payroll-tab-content">
+            <div id="payrollHistoryContent">
+              <div class="payroll-import-zone">
+                <div class="payroll-import-icon">📋</div>
+                <div class="payroll-import-title">Payroll History</div>
+                <div class="payroll-import-subtitle">No payroll history available</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- === PRINT PAGE === -->
+      <div class="page" id="payslip">
+        <div class="print-container">
+          <!-- Print Header with Connection Button -->
+          <div class="print-header">
+            <div>
+              <h1 class="print-title">Print Documents</h1>
+              <div class="print-date" id="printCurrentDate">January 29, 2026</div>
+            </div>
+            <button class="btn-printer-connection" id="printerConnectionBtn" onclick="togglePrinterConnection()">
+              <span class="connection-icon" id="connectionIcon">🔴</span>
+              <span class="connection-text" id="connectionText">Not Connected</span>
+            </button>
+          </div>
+
+          <!-- Import Zone -->
+          <div class="print-import-zone" id="printImportZone" 
+              onclick="document.getElementById('printFileInput').click()"
+              ondragover="handlePrintDragOver(event)"
+              ondragenter="handlePrintDragEnter(event)"
+              ondragleave="handlePrintDragLeave(event)"
+              ondrop="handlePrintFileDrop(event)">
+            <input type="file" id="printFileInput" accept=".xlsx,.xls,.pdf" style="display: none;" onchange="handlePrintFileImport(event)">
+            <div class="print-import-icon">🖨️</div>
+            <div class="print-import-title">Drop files here to print</div>
+            <div class="print-import-subtitle">Drag and drop your Excel or PDF files, or click to browse</div>
+            <div class="print-supported-formats">Supported: .xlsx, .xls, .pdf</div>
+          </div>
+
+          <!-- Print Queue -->
+          <div class="print-queue-section" id="printQueueSection" style="display: none;">
+            <h3>Print Queue</h3>
+            <div class="print-queue-list" id="printQueueList">
+              <!-- Queue items will be inserted here -->
+            </div>
+            
+            <div class="print-actions">
+              <button class="btn-clear-queue" onclick="clearPrintQueue()">Clear Queue</button>
+              <button class="btn-print-all" onclick="printAllDocuments()">🖨️ Print All</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+            <!-- === PATIENT ASSIGNMENT PAGE === -->
+      <div class="page" id="reports">
+        <div class="assignment-container">
+          <!-- Assignment Header -->
+          <div class="assignment-header">
+            <div>
+              <h1 class="assignment-title">Patient Assignment</h1>
+              <p class="assignment-subtitle">Assign yourself to pending patients</p>
+            </div>
+            <div class="assignment-date" id="assignmentCurrentDate">January 30, 2026</div>
+          </div>
+
+          <!-- Assignment Tabs -->
+          <div class="assignment-tabs">
+            <button class="assignment-tab active" data-filter="pending" onclick="switchAssignmentTab('pending')">
+              Pending Assignments
+              <span class="assignment-count" id="pendingAssignmentCount">0</span>
+            </button>
+            <button class="assignment-tab" data-filter="assigned" onclick="switchAssignmentTab('assigned')">
+              My Assignments
+              <span class="assignment-count" id="myAssignmentCount">0</span>
+            </button>
+            <button class="assignment-tab" data-filter="completed" onclick="switchAssignmentTab('completed')">
+              Completed
+              <span class="assignment-count" id="completedAssignmentCount">0</span>
+            </button>
+          </div>
+
+          <!-- Search Bar -->
+          <div class="assignment-search">
+            <input type="text" id="assignmentSearchInput" placeholder="🔍 Search by patient name or lab type..." />
+          </div>
+
+          <!-- Pending Assignments List -->
+          <div class="assignment-list" id="assignmentList">
+            <!-- Assignment cards will be inserted here -->
+          </div>
+        </div>
+      </div>
+
+      <!-- === SETTINGS PAGE === -->
+<div class="page" id="settings">
+  <div class="under-development-container">
+    <div class="under-development-icon">🚧</div>
+    <h1 class="under-development-title">Under Development</h1>
+    <p class="under-development-message">
+      This feature is currently being developed.
+    </p>
+  </div>
+</div>
+
+      
+      
+
+  <!-- Payroll Manage Settings Modal -->
+  <div class="payroll-manage-modal" id="payrollManageModal">
+    <div class="payroll-manage-content" style="max-width: 700px;">
+      <div class="payroll-manage-header">
+        <h2>Manage Payroll Settings</h2>
+        <button class="payroll-manage-close" onclick="closeManageSettings()">×</button>
+      </div>
+
+      <!-- Tabs for different settings -->
+      <div class="manage-tabs" style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 2px solid #e5e7eb;">
+        <button class="manage-tab-btn active" onclick="switchManageTab('departments')" data-tab="departments">
+          👥 Departments
+        </button>
+        <button class="manage-tab-btn" onclick="switchManageTab('presets')" data-tab="presets">
+          ⏰ Time Presets
+        </button>
+      </div>
+
+      <!-- Departments Tab -->
+      <div id="manageDepartmentsTab" class="manage-tab-content active">
+        <div style="margin-bottom: 1rem;">
+          <p style="color: #6b7280; font-size: 0.9rem; margin: 0;">
+            Assign and manage employee departments. Changes will be reflected throughout the payroll system.
+          </p>
+        </div>
+        
+        <div id="employeeDepartmentList" style="max-height: 400px; overflow-y: auto;">
+          <!-- Employee list will be populated here -->
+        </div>
+      </div>
+
+      <!-- Time Presets Tab -->
+      <div id="managePresetsTab" class="manage-tab-content" style="display: none;">
+        <div style="margin-bottom: 1rem;">
+          <p style="color: #6b7280; font-size: 0.9rem; margin: 0;">
+            Manage required time presets for attendance tracking.
+          </p>
+        </div>
+        
+        <div class="preset-list" id="presetList">
+          <!-- Presets will be populated here -->
+        </div>
+
+        <button class="btn-preset-add" onclick="addNewPreset()">+ Add New Preset</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Product Modal -->
+  <div class="modal" id="addProductModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Add Product</h2>
+        <button class="modal-close" id="closeModal">&times;</button>
+      </div>
+      <form id="addProductForm">
+        <div class="form-group">
+          <label for="productDate">Date</label>
+          <input type="date" id="productDate" required>
+        </div>
+        <div class="form-group">
+          <label for="productCategory">Category</label>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <select id="productCategory" required style="flex: 1;">
+              <option value="">Select Category</option>
+            </select>
+            <button type="button" id="manageCategoriesBtn" style="padding: 0.6rem; border: 1px solid #d1d5db; background: white; color: #374151; border-radius: 6px; cursor: pointer; white-space: nowrap;">
+              Manage
+            </button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="productName">Product Name</label>
+          <input type="text" id="productName" required>
+        </div>
+        <div class="form-group">
+          <label for="productExpiry">Expiry</label>
+          <input type="date" id="productExpiry" required>
+        </div>
+        <div class="form-group">
+          <label for="productQty">Quantity</label>
+          <input type="number" id="productQty" min="0" required>
+        </div>
+        <div class="form-group">
+          <label for="productStatus">Status</label>
+          <select id="productStatus" required>
+            <option value="Available">Available</option>
+            <option value="Low Stock">Low Stock</option>
+            <option value="Out of Stock">Out of Stock</option>
+          </select>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn-cancel" id="cancelBtn">Cancel</button>
+          <button type="submit" class="btn-submit">Add Product</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Category Management Modal -->
+  <div class="modal" id="categoryModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Manage Categories</h2>
+        <button class="modal-close" id="closeCategoryModal">&times;</button>
+      </div>
+      
+      <div class="category-list" id="categoryList">
+        <!-- Categories will be inserted here -->
+      </div>
+      
+      <div class="category-bottom-actions">
+        <input type="text" id="newCategoryInput" placeholder="Enter new category name...">
+        <button id="saveCategoriesBtn" class="btn-save-all">💾 Save</button>
+        <button id="addCategoryBtn" class="btn-add-category">+ Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stock Detail Modal -->
+  <div class="modal" id="stockDetailModal">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2 id="stockDetailTitle">Stock Details</h2>
+        <button class="modal-close" id="closeStockDetailModal">&times;</button>
+      </div>
+      
+      <div id="stockDetailBody" style="max-height: 60vh; overflow-y: auto;">
+        <!-- Stock details will be inserted here -->
+      </div>
+      
+      <div class="form-actions" style="margin-top: 1.5rem;">
+        <button type="button" class="btn-cancel" id="closeStockDetailBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Receipts Modal -->
+  <div class="modal" id="journalRecentModal">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2>Print Queue</h2>
+        <button class="modal-close" id="closeJournalRecentModal">&times;</button>
+      </div>
+      <div id="journalRecentModalBody" style="max-height: 60vh; overflow-y: auto; padding: 1.25rem;">
+        <div class="journal-empty">No receipts in queue</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Receipt Preview Modal -->
+  <div class="modal" id="journalPreviewModal">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2>Receipt Preview</h2>
+        <button class="modal-close" id="closeJournalPreviewModal">&times;</button>
+      </div>
+      <div id="journalPreviewModalBody" style="max-height: 60vh; overflow-y: auto; padding: 1.25rem;">
+        <!-- Receipt preview will be shown here -->
+      </div>
+    </div>
+  </div>
+
+
+
+<script src="other.js"></script>
+</body>
+</html>
